@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Scanner Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-overlay">
+        <div class="login-box">
+            <i class="fas fa-user-shield"></i>
+            <h1>Admin Login</h1>
+            <p>Enter your secure password to continue.</p>
+            <input type="password" id="adminPass" placeholder="••••••••••••">
+            <button id="loginBtn" class="btn-primary full-width">Unlock Dashboard</button>
+            <p id="loginError" style="color: #f44336; margin-top: 15px; display: none; font-weight: 600;">Invalid Password!</p>
+        </div>
+    </div>
+
+    <!-- Dashboard Content -->
+    <div id="dashboardContent" style="display: none; width: 100%; min-height: 100vh;">
+        <div class="sidebar">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>Card Scanner <span class="accent">Pro</span></span>
+            </div>
+            <nav>
+                <a href="#" class="active" onclick="showTab('licenses')"><i class="fas fa-key"></i> Licenses</a>
+                <a href="#" onclick="showTab('users')"><i class="fas fa-users"></i> Users</a>
+                <a href="#" onclick="showTab('activity')"><i class="fas fa-chart-line"></i> Activity</a>
+                <a href="#" onclick="showTab('settings')"><i class="fas fa-cog"></i> Settings</a>
+                <a href="#" id="logoutBtn" style="margin-top: auto; color: #ffab91;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </nav>
+        </div>
+
+        <main>
+            <header>
+                <div class="search-bar">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchInput" placeholder="Search by Key or Device ID...">
+                </div>
+                <button class="btn-primary" onclick="showModal()">+ Generate Keys</button>
+            </header>
+
+            <section class="stats">
+                <div class="stat-card">
+                    <div class="stat-icon blue"><i class="fas fa-id-card"></i></div>
+                    <div class="stat-info">
+                        <h3>Total Keys</h3>
+                        <p id="totalCount">--</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-info">
+                        <h3>Active Now</h3>
+                        <p id="activeCount">--</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon red"><i class="fas fa-ban"></i></div>
+                    <div class="stat-info">
+                        <h3>Blocked</h3>
+                        <p id="blockedCount">--</p>
+                    </div>
+                </div>
+            </section>
+
+            <div class="table-container">
+                <table id="licenseTable">
+                    <thead>
+                        <tr>
+                            <th>License Key</th>
+                            <th>Device ID</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Data will be loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal -->
+    <div id="genModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Generate New Licenses</h2>
+                <i class="fas fa-times close" onclick="hideModal()"></i>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>Prefix (3 Chars)</label>
+                    <input type="text" id="prefix" value="RAK" maxlength="3">
+                </div>
+                <div class="input-group">
+                    <label>Duration</label>
+                    <select id="duration">
+                        <option value="3">3-Day Trial</option>
+                        <option value="1">1 Month</option>
+                        <option value="6">6 Months</option>
+                        <option value="12">12 Months</option>
+                        <option value="120">Lifetime (10 Years)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Quantity</label>
+                    <input type="number" id="qty" value="1" min="1" max="100">
+                </div>
+                <button class="btn-primary full-width" id="genBtn">Generate & Save to Cloud</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SDKs -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>

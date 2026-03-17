@@ -1,6 +1,7 @@
 import "dart:io";
 import "package:camera/camera.dart";
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:path_provider/path_provider.dart";
 
 import "../models/scan_session.dart";
@@ -13,10 +14,16 @@ import "../widgets/scan_camera_view.dart";
 import "../widgets/scan_start_card.dart";
 
 class ScanTab extends StatefulWidget {
-  const ScanTab({super.key, required this.cameras, required this.onGoHistory});
+  const ScanTab({
+    super.key, 
+    required this.cameras, 
+    required this.onGoHistory,
+    required this.isActivated,
+  });
 
   final List<CameraDescription> cameras;
   final VoidCallback onGoHistory;
+  final bool isActivated;
 
   @override
   State<ScanTab> createState() => _ScanTabState();
@@ -309,6 +316,10 @@ class _ScanTabState extends State<ScanTab> {
     );
     await _storage.saveSession(updatedSession);
 
+    // Vibrate on success
+    HapticFeedback.mediumImpact();
+
+    // Show success overlay temporarily
     setState(() {
       _currentSession = updatedSession;
       _countSaved = order;
@@ -316,6 +327,22 @@ class _ScanTabState extends State<ScanTab> {
       _showNextDoneRetry = false;
       _status = "Success: Card #$order saved.";
     });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text("Card Saved Successfully!"),
+            ],
+          ),
+          backgroundColor: Colors.green.shade600,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   Future<void> _done() async {

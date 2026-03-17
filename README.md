@@ -1,44 +1,45 @@
-# Card Scanner Pro (Algeria)
+# Card Scanner Pro (Algeria Edition)
 
-A high-performance, professional Flutter application for scanning recharge cards (Mobilis, Djezzy, Ooredoo, ADSL) using Google ML Kit. This project is built with a focus on **Security**, **Speed**, and **Algerian Market Standards**.
+A high-performance Flutter application designed for high-speed OCR scanning of recharge cards (Mobilis, Djezzy, Ooredoo, and Algérie Télécom). This project features a robust remote licensing system and a dedicated administrative dashboard.
 
-## ??? Security & Protection (The 5 Pillars)
-The app is protected by a multi-layered security system to prevent unauthorized sharing:
-1. **Device-Bound License**: Keys are locked to a single hardware ID.
-2. **Cloud Activation**: Verification is handled securely via Firebase Cloud Functions.
-3. **Periodic Checks**: Automatic background re-validation of licenses.
-4. **Hardware Encryption**: Activation status is hidden in the phone's Keystore.
-5. **Root Detection**: Blocks common hacking tools while allowing Developer Mode.
+## 🚀 Features
 
-## ? Professional Features
-- **Modern UI/UX**: Deep Indigo theme with Material 3 components for a "premium" feel.
-- **High-Precision OCR**: Optimized for 15-digit Algerian recharge codes.
-- **Active Session Resume**: Never lose a scan. Resume exactly where you left off.
-- **Professional Export**: One-tap export to pipe-separated TXT format.
-- **Custom App Icon**: Unique brand identity for the "Card Scanner Pro" solution.
+### Mobile Application (Flutter)
+- **High-Speed OCR**: Optimized for 15 and 16-digit codes using Google ML Kit.
+- **Precision Cropping**: Interactive camera view with fixed-aspect ratios for different card types.
+- **Smart Validation**: 
+  - Prevents duplicate scans within the same session.
+  - Checksum validation for license keys (offline check).
+- **Premium UX**: 
+  - Haptic feedback (vibrations) on successful scans.
+  - Modern Deep Indigo theme with Material 3 components.
+- **Export System**: Generates standardized `.txt` files (e.g., `CRT MOBILIS`, `CRT ADSL`) compatible with Algerian management systems.
 
-## ??? Architecture
-- **Service-Oriented Design**: All logic (OCR, Storage, Export, Security) is encapsulated in dedicated services.
-- **Secure Persistence**: Uses Hive for fast data and SecureStorage for license keys.
-- **Model-First**: Type-safe data handling for sessions, items, and card configurations.
+### Security & Licensing
+- **Device Locking**: Licenses are cryptographically bound to the device hardware ID.
+- **Real-time Monitoring**: The app instantly reacts to license blocks or expiration via Firestore Streams.
+- **Trial System**: Support for generated 3-Day trial keys to facilitate customer acquisition.
+- **Root Detection**: Built-in jailbreak/root detection to prevent unauthorized tampering.
 
-## ??? Getting Started
+### Admin Dashboard (Web)
+- **Firebase Hosted**: Accessible from anywhere at `https://card-scanner-1338a.web.app/`.
+- **License Management**:
+  - Bulk key generation with customizable prefixes.
+  - Duration control: 3-Day Trial, 1 Month, 6 Months, 1 Year, and Lifetime.
+  - Instant Block/Unlock/Delete functionality.
+- **Live Stats**: Real-time tracking of total, active, and blocked licenses.
 
-### Prerequisites
-- Flutter SDK (latest)
-- Firebase Project (for licensing)
-- Android physical device
+## 🛠️ Technology Stack
+- **Frontend**: Flutter (Dart)
+- **Admin Dashboard**: HTML5, CSS3 (Modern Flexbox/Grid), JavaScript (ES6+).
+- **Backend**: Firebase (Cloud Firestore, Firebase Hosting).
+- **Local Storage**: Hive (Encrypted for sensitive data).
 
-### Installation & Icon Setup
-1. Clone the repo and run lutter pub get.
-2. To update the app icon, run:
-   `ash
-   flutter pub run flutter_launcher_icons:main
-   `
-3. Build the "Hardened" APK for distribution:
-   `ash
-   flutter build apk --release --obfuscate --split-debug-info=build/app/outputs/symbols
-   `
+## 📦 Building the App
+To generate the lightweight ARM64 APK:
+```bash
+flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons
+```
 
 ---
-*Developed by Gemini CLI Assistant for professional distribution.*
+*Created for the Algerian Recharge Card Market - March 2026*

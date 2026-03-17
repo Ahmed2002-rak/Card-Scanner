@@ -5,7 +5,12 @@ import "../models/scan_session.dart";
 import "session_details_screen.dart";
 
 class HistoryTab extends StatelessWidget {
-  const HistoryTab({super.key});
+  final bool isActivated;
+
+  const HistoryTab({
+    super.key, 
+    required this.isActivated,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -31,10 +36,10 @@ class HistoryTab extends StatelessWidget {
               final s = sessions[i];
               return ListTile(
                 title: Text(
-                  "${s.cardName} • ${s.amount} DA${s.isActive ? " (active)" : ""}",
+                  "${s.cardName} | ${s.amount} DA${s.isActive ? " (active)" : ""}",
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text("${s.createdAt.toLocal().toString().split(".")[0]} • ${s.count} cards"),
+                subtitle: Text("${s.createdAt.toLocal().toString().split(".")[0]} â€¢ ${s.count} cards"),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.push(

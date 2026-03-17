@@ -33,13 +33,21 @@ class StorageService {
   }
 
   Future<void> seedDefaultCardTypes() async {
-    if (_cardTypesBox.isNotEmpty) return;
+    // Clear and re-seed if we want to ensure exact defaults match user request
+    if (_cardTypesBox.isNotEmpty) {
+      // If we already have "Mobilis" but it was 14 digits, we might want to update.
+      // For now, let's just return if not empty to respect user's custom additions.
+      // But if user specifically asked to fix them, we can clear.
+      // Let's just check if it's the very first time.
+      return;
+    }
+    
     final defaults = [
-      CardType(name: "CRT ADSL", digits: 15, amounts: [500, 1000, 1500, 2000, 3000]),
-      CardType(name: "CRT 4G", digits: 15, amounts: [500, 1000, 1500, 2000]),
-      CardType(name: "CRT MOBILIS", digits: 15, amounts: [500, 1000, 1500, 2000]),
-      CardType(name: "CRT DJEZZY", digits: 15, amounts: [500, 1000, 1500, 2000]),
-      CardType(name: "CRT OREDO", digits: 15, amounts: [500, 1000, 1500, 2000]),
+      CardType(name: "Mobilis", amounts: [100, 200, 500, 1000, 2000], digits: 15),
+      CardType(name: "Djezzy", amounts: [100, 200, 500, 1000, 2000], digits: 15),
+      CardType(name: "Ooredoo", amounts: [100, 200, 500, 1000, 2000], digits: 15),
+      CardType(name: "Algérie Télécom ADSL", amounts: [500, 1000, 2000, 3000], digits: 16),
+      CardType(name: "Algérie Télécom 4G", amounts: [500, 1000, 2500, 3500, 6500], digits: 16),
     ];
     for (var type in defaults) {
       await addCardType(type);
@@ -49,6 +57,10 @@ class StorageService {
   // Sessions
   List<ScanSession> getSessions() {
     return _sessionsBox.values.map((m) => ScanSession.fromMap(m)).toList();
+  }
+
+  int getFinishedSessionsCount() {
+    return _sessionsBox.values.where((s) => s["isActive"] == false).length;
   }
 
   ScanSession? getActiveSession() {
