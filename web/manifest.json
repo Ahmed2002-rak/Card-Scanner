@@ -1,11 +1,11 @@
 {
-    "name": "card_scanner",
-    "short_name": "card_scanner",
+    "name": "Card Scanner Pro",
+    "short_name": "Card Scanner Pro",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "A professional card scanning application.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
