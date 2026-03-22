@@ -60,12 +60,22 @@ class SecureLicensing {
       final deviceId = await _getDeviceId();
 
       // Basic validity
-      if (data['status'] == 'blocked' || data['status'] == 'deleted') return false;
+      if (data['status'] == 'blocked' || data['status'] == 'deleted' || data['status'] == 'expired') return false;
       
       // Expiry check
       if (data['expiryDate'] != null) {
         final expiry = (data['expiryDate'] as Timestamp).toDate();
-        if (DateTime.now().isAfter(expiry)) return false;
+        if (DateTime.now().isAfter(expiry)) {
+          // AUTO-EXPIRY LOGIC
+          await doc.reference.update({'status': 'expired'});
+          await _firestore.collection('activity').add({
+            'key': key,
+            'action': 'Expired',
+            'device': data['deviceModel'] ?? 'Unknown',
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+          return false;
+        }
       }
 
       // Device ownership check
@@ -133,12 +143,15 @@ class SecureLicensing {
       final data = doc.data();
 
       // 1. Status Check
-      if (data['status'] == 'blocked' || data['status'] == 'deleted') return false;
+      if (data['status'] == 'blocked' || data['status'] == 'deleted' || data['status'] == 'expired') return false;
       
       // 2. Expiry Check
       if (data['expiryDate'] != null) {
         final expiry = (data['expiryDate'] as Timestamp).toDate();
-        if (DateTime.now().isAfter(expiry)) return false;
+        if (DateTime.now().isAfter(expiry)) {
+          await doc.reference.update({'status': 'expired'});
+          return false;
+        }
       }
 
       // 3. Device Ownership Check
@@ -168,7 +181,16 @@ class SecureLicensing {
 
       await doc.reference.update(updates);
       
-      // 5. Log Activity (Fire and forget, don't block activation success)
+      // 5. Update User Profile
+      await _firestore.collection('users').doc(deviceId).set({
+        'deviceId': deviceId,
+        'deviceModel': model,
+        'deviceOS': os,
+        'currentLicense': key,
+        'lastActive': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // 6. Log Activity (Fire and forget, don't block activation success)
       _firestore.collection('activity').add({
         'key': key,
         'action': 'Activated',

@@ -15,6 +15,7 @@ const db = getFirestore(app);
 
 const ADMIN_PASS = "Ahmed.16021988";
 let allLicenses = [];
+let allUsers = [];
 let currentFilter = 'all';
 let currentSearch = '';
 let userSearch = '';
@@ -77,26 +78,31 @@ async function logActivity(key, action, device = "System") {
 }
 
 function startListeners() {
-    // Licenses Listener
+    // 1. Licenses Listener
     const qLic = query(collection(db, "licenses"), orderBy("createdAt", "desc"));
     onSnapshot(qLic, (snapshot) => {
         allLicenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         updateStats();
         renderLicenses();
+    });
+
+    // 2. Users Listener
+    const qUsers = query(collection(db, "users"), orderBy("lastActive", "desc"));
+    onSnapshot(qUsers, (snapshot) => {
+        allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderUsers();
     });
 
-    // Activity Listener
+    // 3. Activity Listener
     const qAct = query(collection(db, "activity"), orderBy("timestamp", "desc"), limit(50));
     onSnapshot(qAct, (snapshot) => {
         renderActivity(snapshot.docs.map(doc => doc.data()));
     });
 
-    // Settings Listener
+    // 4. Settings Listener
     onSnapshot(doc(db, "settings", "global"), (snap) => {
         if (snap.exists()) {
             const data = snap.data();
-            // Don't overwrite the announcement field if user is typing
             if (document.activeElement !== document.getElementById('setting-announcement')) {
                 document.getElementById('setting-announcement').value = data.announcement || '';
             }
@@ -113,7 +119,7 @@ function updateStats() {
     activeCount.innerText = allLicenses.filter(l => l.status === 'active').length;
     pendingCount.innerText = allLicenses.filter(l => l.status === 'pending').length;
     blockedCount.innerText = allLicenses.filter(l => l.status === 'blocked').length;
-    expiredCount.innerText = allLicenses.filter(l => l.status === 'expired' || (l.expiryDate && new Date() > new Date(l.expiryDate.seconds * 1000))).length;
+    expiredCount.innerText = allLicenses.filter(l => l.status === 'expired').length;
     deletedCount.innerText = allLicenses.filter(l => l.status === 'deleted').length;
 }
 
@@ -127,8 +133,7 @@ function renderLicenses() {
     }
 
     filtered.forEach(item => {
-        const isExpired = item.expiryDate && new Date() > new Date(item.expiryDate.seconds * 1000);
-        const displayStatus = isExpired ? 'expired' : item.status;
+        const displayStatus = item.status;
         const expiryDate = item.expiryDate ? new Date(item.expiryDate.seconds * 1000).toLocaleDateString() : 'Not Activated';
         
         const row = document.createElement('tr');
@@ -149,19 +154,19 @@ function renderLicenses() {
 
 function renderUsers() {
     usersTableBody.innerHTML = '';
-    let activated = allLicenses.filter(l => l.deviceId);
+    let filtered = allUsers;
     if (userSearch) {
         const s = userSearch.toLowerCase();
-        activated = activated.filter(u => u.key.toLowerCase().includes(s) || (u.deviceModel && u.deviceModel.toLowerCase().includes(s)));
+        filtered = filtered.filter(u => u.deviceId.toLowerCase().includes(s) || (u.deviceModel && u.deviceModel.toLowerCase().includes(s)) || (u.currentLicense && u.currentLicense.toLowerCase().includes(s)));
     }
-    activated.forEach(u => {
+    filtered.forEach(u => {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td><strong>${u.deviceModel || 'Unknown'}</strong></td>
             <td>${u.deviceOS || 'Unknown'}</td>
-            <td><code>${u.key}</code></td>
+            <td><code>${u.currentLicense || 'N/A'}</code></td>
             <td><small>${u.adminNotes || 'No notes'}</small></td>
-            <td><button class="btn-primary" style="padding:5px 10px; font-size:0.7rem;" onclick="window.openNoteModal('${u.id}', '${u.adminNotes || ''}')">Note</button></td>
+            <td><button class="btn-primary" style="padding:5px 10px; font-size:0.7rem;" onclick="window.openUserNoteModal('${u.deviceId}', '${u.adminNotes || ''}')">Note</button></td>
         `;
         usersTableBody.appendChild(row);
     });
@@ -179,9 +184,9 @@ function renderActivity(activities) {
         else if (action.includes('generated')) { icon = 'magic'; color = '#9c27b0'; }
         else if (action.includes('blocked')) { icon = 'ban'; color = '#f44336'; }
         else if (action.includes('unblocked')) { icon = 'unlock'; color = '#2196f3'; }
-
         else if (action.includes('deleted')) { icon = 'trash'; color = '#000000'; }
         else if (action.includes('reset')) { icon = 'redo'; color = '#ff9800'; }
+        else if (action.includes('expired')) { icon = 'clock'; color = '#757575'; }
         
         item.innerHTML = `
             <div class="activity-icon" style="background: ${color}22; color: ${color}"><i class="fas fa-${icon}"></i></div>
@@ -205,15 +210,7 @@ window.toggleBlock = async (id, status) => {
     let newStatus;
     if (status === 'blocked') {
         // Unblocking
-        // Check if this device is already using ANOTHER active license
-        const deviceId = lic.deviceId;
-        const otherActive = allLicenses.find(l => l.deviceId === deviceId && l.status === 'active' && l.id !== id);
-        
-        if (otherActive) {
-            newStatus = 'pending'; // Device already has an active license, return this to pending
-        } else {
-            newStatus = deviceId ? 'active' : 'pending';
-        }
+        newStatus = lic.deviceId ? 'active' : 'pending';
         await logActivity(lic.key, "Unblocked", lic.deviceModel || "System");
     } else {
         // Blocking
@@ -237,18 +234,21 @@ window.resetDevice = async (id) => {
 
 window.markDeleted = async (id) => {
     const lic = allLicenses.find(l => l.id === id);
-    if (lic.status === 'deleted') return;
+    if (lic.status === 'deleted' || lic.status === 'expired') {
+        alert("Deleted or Expired licenses cannot be modified.");
+        return;
+    }
     if (confirm(`Permanently delete license ${lic.key}? This cannot be undone.`)) {
         await logActivity(lic.key, "Deleted license");
         await updateDoc(doc(db, "licenses", id), { status: 'deleted' });
     }
 };
 
-window.openNoteModal = (id, note) => {
+window.openUserNoteModal = (deviceId, note) => {
     document.getElementById('noteModal').style.display = 'flex';
     document.getElementById('userNoteText').value = note;
     document.getElementById('saveNoteBtn').onclick = async () => {
-        await updateDoc(doc(db, "licenses", id), { adminNotes: document.getElementById('userNoteText').value });
+        await updateDoc(doc(db, "users", deviceId), { adminNotes: document.getElementById('userNoteText').value });
         document.getElementById('noteModal').style.display = 'none';
     };
 };
@@ -266,7 +266,6 @@ const saveGlobal = async (type) => {
         lastUpdated: serverTimestamp()
     };
 
-    // If it's an announcement update, we might want to change its "ID" to trigger a popup on phones
     if (type === 'announcement') {
         data.announcementId = Date.now().toString();
     }
@@ -274,7 +273,7 @@ const saveGlobal = async (type) => {
     await setDoc(doc(db, "settings", "global"), data, { merge: true });
     
     if (type === 'announcement') {
-        document.getElementById('setting-announcement').value = ''; // Clear field after success
+        document.getElementById('setting-announcement').value = ''; 
         alert("Announcement sent and field cleared!");
     } else {
         alert("Settings applied!");
@@ -310,7 +309,7 @@ window.handleGenerate = async () => {
         };
         
         if (durationVal === "3") docData.durationDays = 3; 
-        else if (durationVal === "120") docData.lifetime = true; // Lifetime
+        else if (durationVal === "120") docData.lifetime = true;
         else docData.durationMonths = parseInt(durationVal);
         
         await addDoc(collection(db, "licenses"), docData);
