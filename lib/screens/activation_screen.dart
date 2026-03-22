@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/secure_licensing.dart';
 
 class ActivationScreen extends StatefulWidget {
@@ -14,6 +16,42 @@ class _ActivationScreenState extends State<ActivationScreen> {
   final _keyController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
+  String _supportLink = "https://t.me/your_default_support";
+  StreamSubscription? _settingsSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _settingsSub = SecureLicensing.getSettingsStream().listen((doc) {
+      if (doc.exists && mounted) {
+        setState(() {
+          _supportLink = (doc.data() as Map<String, dynamic>)['supportLink'] ?? _supportLink;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _settingsSub?.cancel();
+    super.dispose();
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Activation Error"),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _handleActivation() async {
     final key = _keyController.text.trim();
@@ -32,13 +70,25 @@ class _ActivationScreenState extends State<ActivationScreen> {
       if (success) {
         widget.onActivated();
       } else {
-        setState(() => _errorMessage = 'Invalid key or unauthorized device');
+        const err = 'Invalid key or unauthorized device';
+        setState(() => _errorMessage = err);
+        _showErrorDialog(err);
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Activation failed. Check your internet.');
+      const err = 'Activation failed. Check your internet.';
+      setState(() => _errorMessage = err);
+      _showErrorDialog(err);
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  void _launchSupport() {
+    String url = _supportLink;
+    if (!url.startsWith('http')) {
+      url = 'https://t.me/${url.replaceAll('@', '')}';
+    }
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -47,13 +97,11 @@ class _ActivationScreenState extends State<ActivationScreen> {
       backgroundColor: const Color(0xFF1A237E),
       body: Stack(
         children: [
-          // Background Design
           Positioned(
             top: -100,
             right: -100,
             child: CircleAvatar(radius: 200, backgroundColor: Colors.white.withOpacity(0.05)),
           ),
-          
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -71,11 +119,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
                   const SizedBox(height: 32),
                   const Text(
                     'License Required',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -84,19 +128,11 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     style: TextStyle(color: Colors.white70, fontSize: 16),
                   ),
                   const SizedBox(height: 40),
-                  
-                  // Key Input
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
-                        )
-                      ],
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
                     ),
                     child: TextField(
                       controller: _keyController,
@@ -106,16 +142,13 @@ class _ActivationScreenState extends State<ActivationScreen> {
                         hintText: 'XXXX-XXXX-XXXX',
                         hintStyle: TextStyle(color: Colors.grey.shade400, letterSpacing: 1),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(20),
-                        errorText: _errorMessage,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                        // errorText: _errorMessage, // Removed to use only popup
                       ),
                       textCapitalization: TextCapitalization.characters,
                     ),
                   ),
-                  
                   const SizedBox(height: 32),
-                  
-                  // Submit Button
                   SizedBox(
                     width: double.infinity,
                     height: 60,
@@ -128,22 +161,13 @@ class _ActivationScreenState extends State<ActivationScreen> {
                       ),
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.black)
-                          : const Text(
-                              'ACTIVATE NOW',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
+                          : const Text('ACTIVATE NOW', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  
                   const SizedBox(height: 40),
                   TextButton(
-                    onPressed: () {
-                      // Logic to contact support
-                    },
-                    child: const Text(
-                      'Don\'t have a key? Contact Support',
-                      style: TextStyle(color: Colors.white60),
-                    ),
+                    onPressed: _launchSupport,
+                    child: const Text('Don\'t have a key? Contact Support', style: TextStyle(color: Colors.white60)),
                   ),
                 ],
               ),
