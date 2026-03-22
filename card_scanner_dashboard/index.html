@@ -17,12 +17,12 @@
             <p>Enter your secure password to continue.</p>
             <input type="password" id="adminPass" placeholder="••••••••••••">
             <button id="loginBtn" class="btn-primary full-width">Unlock Dashboard</button>
-            <p id="loginError" style="color: #f44336; margin-top: 15px; display: none; font-weight: 600;">Invalid Password!</p>
+            <p id="loginError" style="color:#f44336; margin-top:15px; display:none; font-weight:600;">Invalid Password!</p>
         </div>
     </div>
 
     <!-- Dashboard Content -->
-    <div id="dashboardContent" style="display: none; width: 100%; min-height: 100vh;">
+    <div id="dashboardContent" style="display:none; width:100%; min-height:100vh;">
         <div class="sidebar">
             <div class="logo">
                 <i class="fas fa-shield-alt"></i>
@@ -33,7 +33,7 @@
                 <a href="#" data-tab="users"><i class="fas fa-users"></i> Users</a>
                 <a href="#" data-tab="activity"><i class="fas fa-chart-line"></i> Activity</a>
                 <a href="#" data-tab="settings"><i class="fas fa-cog"></i> Settings</a>
-                <a href="#" id="logoutBtn" style="margin-top: auto; color: #ffab91;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                <a href="#" id="logoutBtn" style="margin-top:auto; color:#ffab91;"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </nav>
         </div>
 
@@ -47,7 +47,6 @@
                     </div>
                     <button class="btn-primary" onclick="showModal()">+ Generate Keys</button>
                 </header>
-
                 <section class="stats">
                     <div class="stat-card clickable active" data-filter="all"><h3>Total</h3><p id="totalCount">0</p></div>
                     <div class="stat-card clickable" data-filter="active"><h3>Active</h3><p id="activeCount" class="text-green">0</p></div>
@@ -56,7 +55,6 @@
                     <div class="stat-card clickable" data-filter="expired"><h3>Expired</h3><p id="expiredCount" class="text-gray">0</p></div>
                     <div class="stat-card clickable" data-filter="deleted"><h3>Deleted</h3><p id="deletedCount" class="text-black">0</p></div>
                 </section>
-
                 <div class="table-container">
                     <table>
                         <thead>
@@ -100,7 +98,7 @@
 
             <!-- Tab: ACTIVITY -->
             <div id="tab-activity" class="tab-page">
-                <h1>Live Activity Feed</h1>
+                <h1>Live Activity Feed <span style="font-size:0.75rem; font-weight:400; color:#888;">(last 100 events)</span></h1>
                 <div class="activity-feed" id="activityFeed"></div>
             </div>
 
@@ -110,7 +108,7 @@
                 <div class="settings-grid">
                     <div class="settings-card">
                         <h3><i class="fas fa-bullhorn"></i> Global Announcement</h3>
-                        <p>Appears as a banner in everyone's app.</p>
+                        <p>Appears as a popup in everyone's app.</p>
                         <textarea id="setting-announcement" placeholder="Enter message..."></textarea>
                         <button class="btn-primary" id="saveAnnouncementBtn">Apply Announcement</button>
                     </div>
@@ -119,6 +117,14 @@
                         <p>Update your Telegram/WhatsApp link.</p>
                         <input type="text" id="setting-support" placeholder="https://t.me/...">
                         <button class="btn-primary" id="saveSupportBtn">Update Link</button>
+                    </div>
+                    <!-- ✅ NEW: Change admin password from within the dashboard -->
+                    <div class="settings-card">
+                        <h3><i class="fas fa-lock"></i> Admin Password</h3>
+                        <p>Change the dashboard login password. It will be saved to Firestore.</p>
+                        <input type="password" id="setting-password" placeholder="New password (min 6 chars)">
+                        <input type="password" id="setting-password-confirm" placeholder="Confirm new password" style="margin-top:8px;">
+                        <button class="btn-primary" id="savePasswordBtn" style="margin-top:8px;">Change Password</button>
                     </div>
                     <div class="settings-card danger">
                         <h3><i class="fas fa-skull-crossbones"></i> Master Kill-Switch</h3>
@@ -134,9 +140,63 @@
         </main>
     </div>
 
-    <!-- Modals -->
-    <div id="genModal" class="modal"><div class="modal-content"><div class="modal-header"><h2>Generate Licenses</h2><i class="fas fa-times close" onclick="hideModal()"></i></div><div class="modal-body"><div class="input-group"><label>Prefix</label><input type="text" id="prefix" value="RAK" maxlength="3"></div><div class="input-group"><label>Duration</label><select id="duration"><option value="3">3-Day Trial</option><option value="1">1 Month</option><option value="6">6 Months</option><option value="12">12 Months</option><option value="120">Lifetime</option></select></div><div class="input-group"><label>Quantity</label><input type="number" id="qty" value="1" min="1" max="100"></div><button class="btn-primary full-width" id="genBtn">Generate & Save</button></div></div></div>
-    <div id="noteModal" class="modal"><div class="modal-content"><h2>Edit User Note</h2><textarea id="userNoteText" style="width:100%; height:100px; margin:15px 0; padding:10px; border-radius:10px; border:1px solid #ddd;"></textarea><div style="display:flex; gap:10px;"><button class="btn-primary" id="saveNoteBtn">Save Note</button><button class="btn-secondary" onclick="document.getElementById('noteModal').style.display='none'">Cancel</button></div></div></div>
+    <!-- Modal: Generate Keys -->
+    <div id="genModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Generate Licenses</h2>
+                <i class="fas fa-times close" onclick="hideModal()"></i>
+            </div>
+            <div class="modal-body">
+                <div class="input-group"><label>Prefix</label><input type="text" id="prefix" value="RAK" maxlength="3"></div>
+                <div class="input-group">
+                    <label>Duration</label>
+                    <select id="duration">
+                        <option value="3">3-Day Trial</option>
+                        <option value="1">1 Month</option>
+                        <option value="6">6 Months</option>
+                        <option value="12">12 Months</option>
+                        <option value="120">Lifetime</option>
+                    </select>
+                </div>
+                <div class="input-group"><label>Quantity</label><input type="number" id="qty" value="1" min="1" max="100"></div>
+                <button class="btn-primary full-width" id="genBtn">Generate & Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: User Note -->
+    <div id="noteModal" class="modal">
+        <div class="modal-content">
+            <h2>Edit User Note</h2>
+            <textarea id="userNoteText" style="width:100%; height:100px; margin:15px 0; padding:10px; border-radius:10px; border:1px solid #ddd;"></textarea>
+            <div style="display:flex; gap:10px;">
+                <button class="btn-primary" id="saveNoteBtn">Save Note</button>
+                <button class="btn-secondary" onclick="document.getElementById('noteModal').style.display='none'">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ NEW Modal: Extend Key -->
+    <div id="extendModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-calendar-plus" style="color:#009688; margin-right:8px;"></i>Extend License</h2>
+                <i class="fas fa-times close" onclick="hideExtendModal()"></i>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>Days to Add</label>
+                    <input type="number" id="extendDays" value="30" min="1" max="3650" placeholder="e.g. 30">
+                </div>
+                <p id="extendCurrentExpiry" style="color:#888; font-size:0.85rem; margin-top:8px;"></p>
+                <p id="extendNewExpiry" style="color:#3F51B5; font-size:0.9rem; font-weight:600; margin-top:4px;"></p>
+                <button class="btn-primary full-width" id="confirmExtendBtn" style="margin-top:16px; background:#009688;">
+                    Confirm Extension
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="app.js"></script>
 </body>

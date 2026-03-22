@@ -3,7 +3,6 @@ import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
 
 import '../main.dart' show cameras;
@@ -34,58 +33,81 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    _initListeners();
+    _checkInitialActivation();
+  }
+
+  Future<void> _checkInitialActivation() async {
+    final activated = await SecureLicensing.isActivated();
+    if (mounted) {
+      setState(() => _isActivated = activated);
+      if (activated) {
+        await _initListeners();
+        // ✅ NEW: Check expiry warning only on initial launch, not after re-activation
+        _checkExpiryWarning();
+      }
+    }
+  }
+
+  // Cancels existing subscriptions before starting new ones — prevents duplicate streams
+  Future<void> _cancelListeners() async {
+    await _licenseSub?.cancel();
+    await _settingsSub?.cancel();
+    _licenseSub = null;
+    _settingsSub = null;
   }
 
   Future<void> _initListeners() async {
-    // 1. Get Device ID
-    String deviceId = '';
-    var deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      var androidInfo = await deviceInfo.androidInfo;
-      deviceId = androidInfo.id;
-    } else if (Platform.isIOS) {
-      var iosInfo = await deviceInfo.iosInfo;
-      deviceId = iosInfo.identifierForVendor ?? '';
-    }
+    await _cancelListeners();
 
-    // 2. Start License Listener (By Device ID)
+    final deviceId = await SecureLicensing.getDeviceId();
+
     if (deviceId.isNotEmpty) {
-      _licenseSub = SecureLicensing.getLicenseSnapshotStream(deviceId).listen((doc) {
-        if (doc == null || !doc.exists) {
-          // If no document for this device, keep _isActivated as it is or false if not activated before
-          // Better: don't force false if it's just missing, wait for activation
-          return;
-        }
-        final data = doc.data() as Map<String, dynamic>;
-        final status = data['status'];
-        
-        bool isExpired = false;
-        if (data['expiryDate'] != null) {
-          final expiry = (data['expiryDate'] as Timestamp).toDate();
-          if (DateTime.now().isAfter(expiry)) isExpired = true;
-        }
-
-        if ((status == 'blocked' || status == 'deleted' || isExpired)) {
-          if (mounted) {
-            setState(() => _isActivated = false);
-            _showRevokedDialog(isExpired ? "Licence Expired" : "Licence Revoked");
+      _licenseSub = SecureLicensing.getLicenseSnapshotStream(deviceId).listen(
+        (doc) async {
+          if (doc == null || !doc.exists) {
+            final wasActivated = await SecureLicensing.isActivated();
+            if (wasActivated) {
+              if (mounted) {
+                await SecureLicensing.deactivate();
+                setState(() => _isActivated = false);
+              }
+            }
+            return;
           }
-        } else if (status == 'active' && !isExpired) {
-          if (mounted) setState(() => _isActivated = true);
-        }
-      }, onError: (e) {
-        // If query fails (e.g. no document matches), don't crash
-      });
+
+          final data = doc.data() as Map<String, dynamic>;
+          final status = data['status'];
+
+          bool isExpired = false;
+          if (data['expiryDate'] != null) {
+            final expiry = (data['expiryDate'] as Timestamp).toDate();
+            if (DateTime.now().isAfter(expiry)) isExpired = true;
+          }
+
+          if (status == 'blocked' || status == 'deleted' || isExpired) {
+            if (mounted) {
+              await SecureLicensing.deactivate();
+              setState(() => _isActivated = false);
+              _showRevokedDialog(
+                isExpired ? "Licence Expired" : "Licence Revoked",
+              );
+            }
+          } else if (status == 'active' && !isExpired) {
+            if (mounted) setState(() => _isActivated = true);
+          }
+        },
+        onError: (e) {
+          // Stream error — keep current state
+        },
+      );
     }
 
-    // 3. Start Settings Listener
     _settingsSub = SecureLicensing.getSettingsStream().listen((doc) {
       if (doc.exists && mounted) {
         final data = doc.data() as Map<String, dynamic>;
         final newAnnounce = data['announcement'];
         final newAnnounceId = data['announcementId'];
-        
+
         setState(() {
           _announcement = newAnnounce;
           _announcementId = newAnnounceId;
@@ -93,7 +115,6 @@ class _AppShellState extends State<AppShell> {
           _isKilled = data['killSwitch'] ?? false;
         });
 
-        // Check for popup requirement
         if (newAnnounce != null && newAnnounce.isNotEmpty) {
           _checkAndShowAnnouncement(newAnnounce, newAnnounceId);
         }
@@ -101,14 +122,84 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  // ✅ NEW: Fetches the active license from Firestore and shows an expiry
+  // warning popup if fewer than 7 days remain — at most once per calendar day.
+  Future<void> _checkExpiryWarning() async {
+    try {
+      final key = await SecureLicensing.getStoredKey();
+      if (key == null) return;
+
+      final result = await FirebaseFirestore.instance
+          .collection('licenses')
+          .where('key', isEqualTo: key)
+          .limit(1)
+          .get();
+
+      if (result.docs.isEmpty) return;
+
+      final data = result.docs.first.data();
+      if (data['expiryDate'] == null)
+        return; // Lifetime key — no warning needed
+
+      final expiry = (data['expiryDate'] as Timestamp).toDate();
+      final daysLeft = expiry.difference(DateTime.now()).inDays;
+
+      final shouldWarn = await SecureLicensing.shouldShowExpiryWarning(
+        daysLeft,
+      );
+      if (shouldWarn && mounted) {
+        await SecureLicensing.markExpiryWarningShown();
+        _showExpiryWarningDialog(daysLeft);
+      }
+    } catch (e) {
+      // Silent fail — warning is non-critical
+    }
+  }
+
+  void _showExpiryWarningDialog(int daysLeft) {
+    final String message = daysLeft == 0
+        ? "Your licence expires today! Contact support now to keep your access."
+        : "Your licence expires in $daysLeft day${daysLeft == 1 ? '' : 's'}. Contact support to renew before losing access.";
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 10),
+            Text("Licence Expiring Soon"),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Dismiss"),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _launchSupport();
+            },
+            child: const Text("Contact Support"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _checkAndShowAnnouncement(String text, String? id) async {
     final shouldShow = await SecureLicensing.shouldShowAnnouncement(id);
     if (shouldShow && mounted) {
-      // Show Popup
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Row(
             children: [
               Icon(Icons.campaign_rounded, color: Colors.indigo),
@@ -124,7 +215,7 @@ class _AppShellState extends State<AppShell> {
                 Navigator.pop(ctx);
               },
               child: const Text("Got it"),
-            )
+            ),
           ],
         ),
       );
@@ -152,7 +243,9 @@ class _AppShellState extends State<AppShell> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: const Text("Access to the app has been disabled. Please contact support to renew or unlock, or enter a new key."),
+        content: const Text(
+          "Access to the app has been disabled. Please contact support to renew or unlock, or enter a new key.",
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -164,20 +257,18 @@ class _AppShellState extends State<AppShell> {
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              // Deactivate locally to force ActivationScreen
-              SecureLicensing.deactivate();
               setState(() => _isActivated = false);
             },
             child: const Text("Enter New Key"),
-          )
+          ),
         ],
-      )
+      ),
     );
   }
 
   void _onActivated() {
     setState(() => _isActivated = true);
-    _initListeners();
+    _initListeners(); // safely cancels old subscriptions first
   }
 
   @override
@@ -190,11 +281,21 @@ class _AppShellState extends State<AppShell> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.warning_amber_rounded, size: 80, color: Colors.red),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 80,
+                  color: Colors.red,
+                ),
                 const SizedBox(height: 24),
-                const Text("App Temporarily Disabled", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const Text(
+                  "App Temporarily Disabled",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 12),
-                const Text("A major update or maintenance is in progress. Please check back later.", textAlign: TextAlign.center),
+                const Text(
+                  "A major update or maintenance is in progress. Please check back later.",
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 32),
                 FilledButton.icon(
                   onPressed: _launchSupport,
@@ -213,23 +314,33 @@ class _AppShellState extends State<AppShell> {
     }
 
     final pages = [
-      ScanTab(cameras: cameras, onGoHistory: () => setState(() => _index = 1), isActivated: _isActivated),
+      ScanTab(
+        cameras: cameras,
+        onGoHistory: () => setState(() => _index = 1),
+        isActivated: _isActivated,
+      ),
       HistoryTab(isActivated: _isActivated),
       const SettingsTab(),
     ];
 
     return Scaffold(
-      body: SafeArea(
-        top: false,
-        child: pages[_index],
-      ),
+      body: SafeArea(top: false, child: pages[_index]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.qr_code_scanner_rounded), label: 'Scan'),
-          NavigationDestination(icon: Icon(Icons.history_rounded), label: 'History'),
-          NavigationDestination(icon: Icon(Icons.settings_rounded), label: 'Settings'),
+          NavigationDestination(
+            icon: Icon(Icons.qr_code_scanner_rounded),
+            label: 'Scan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_rounded),
+            label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_rounded),
+            label: 'Settings',
+          ),
         ],
       ),
     );
