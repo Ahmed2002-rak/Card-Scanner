@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Scanner Pro — Download</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:      #0D1547;
+            --surface: #1A237E;
+            --card:    #1E2C8A;
+            --accent:  #FFC107;
+            --teal:    #009688;
+            --text:    #ffffff;
+            --muted:   rgba(255,255,255,0.55);
+            --border:  rgba(255,255,255,0.08);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Hero ──────────────────────────────────────────────────────────── */
+        .hero {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            width: 600px; height: 600px;
+            border-radius: 50%;
+            background: rgba(255,193,7,0.04);
+            top: -200px; right: -200px;
+            pointer-events: none;
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            width: 400px; height: 400px;
+            border-radius: 50%;
+            background: rgba(0,150,136,0.05);
+            bottom: -150px; left: -100px;
+            pointer-events: none;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            padding: 48px 40px;
+            max-width: 480px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+        }
+
+        /* ── App icon ──────────────────────────────────────────────────────── */
+        .app-icon {
+            width: 96px; height: 96px;
+            background: var(--surface);
+            border-radius: 24px;
+            border: 2px solid rgba(255,193,7,0.25);
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 24px;
+            box-shadow: 0 0 40px rgba(255,193,7,0.12);
+            font-size: 48px;
+        }
+
+        .app-name {
+            font-size: 26px;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+
+        .app-tagline {
+            color: var(--muted);
+            text-align: center;
+            font-size: 15px;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        /* ── Version badge ─────────────────────────────────────────────────── */
+        .version-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0 28px;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-version  { background: rgba(255,193,7,0.15); color: var(--accent); border: 1px solid rgba(255,193,7,0.2); }
+        .badge-android  { background: rgba(0,150,136,0.15);  color: #4DB6AC;       border: 1px solid rgba(0,150,136,0.2); }
+
+        /* ── Download button ───────────────────────────────────────────────── */
+        .btn-download {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            padding: 18px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 18px;
+            font-family: inherit;
+            font-size: 17px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity .15s, transform .15s;
+            box-shadow: 0 8px 32px rgba(255,193,7,0.3);
+        }
+
+        .btn-download:hover  { opacity: .9; transform: translateY(-1px); }
+        .btn-download:active { opacity: 1;  transform: translateY(0);    }
+
+        .btn-download svg { width: 22px; height: 22px; flex-shrink: 0; }
+
+        /* Loading state */
+        .btn-download.loading { opacity: .6; pointer-events: none; }
+
+        /* ── What's new ────────────────────────────────────────────────────── */
+        .whats-new {
+            margin-top: 28px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        .whats-new h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 12px;
+        }
+
+        .whats-new p {
+            font-size: 14px;
+            color: rgba(255,255,255,0.75);
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+
+        /* ── Install guide ─────────────────────────────────────────────────── */
+        .install-steps {
+            margin-top: 28px;
+        }
+
+        .install-steps h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 14px;
+        }
+
+        .step {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            margin-bottom: 14px;
+        }
+
+        .step-num {
+            width: 28px; height: 28px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        .step-text {
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+            line-height: 1.5;
+            padding-top: 4px;
+        }
+
+        /* ── Footer ────────────────────────────────────────────────────────── */
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: rgba(255,255,255,0.2);
+            font-size: 12px;
+        }
+
+        /* ── Spinner ───────────────────────────────────────────────────────── */
+        .spinner {
+            width: 22px; height: 22px;
+            border: 2.5px solid rgba(0,0,0,0.3);
+            border-top-color: #000;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 520px) {
+            .card { padding: 36px 24px; border-radius: 24px; }
+            .app-name { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <div class="card">
+        <!-- App icon -->
+        <div class="app-icon">🔍</div>
+
+        <!-- App name -->
+        <h1 class="app-name">Card Scanner Pro</h1>
+        <p class="app-tagline">Professional card scanning with license management</p>
+
+        <!-- Version badges -->
+        <div class="version-row">
+            <span class="badge badge-version" id="versionBadge">Loading...</span>
+            <span class="badge badge-android">Android</span>
+        </div>
+
+        <!-- Download button -->
+        <a id="downloadBtn" class="btn-download loading" href="#" onclick="return false;">
+            <span class="spinner" id="btnSpinner"></span>
+            <span id="btnLabel">Loading...</span>
+        </a>
+
+        <!-- What's new -->
+        <div class="whats-new" id="whatsNewBox" style="display:none;">
+            <h4>What's New</h4>
+            <p id="whatsNewText"></p>
+        </div>
+
+        <!-- Install guide -->
+        <div class="install-steps">
+            <h4>How to Install</h4>
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">Tap <strong>Download APK</strong> and wait for the file to finish downloading.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text">Open your file manager and tap the downloaded APK file.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-text">If prompted, allow <strong>Install unknown apps</strong> for your browser or file manager.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-text">Tap <strong>Install</strong> and open the app when it's done. Enter your license key to activate.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer>Card Scanner Pro &nbsp;·&nbsp; <span id="footerVersion"></span></footer>
+
+<!-- Firebase SDK -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey:            "AIzaSyBfnO29PNacfCnUMSHBPyOze-H5wt80D-g",
+        authDomain:        "card-scanner-1338a.firebaseapp.com",
+        projectId:         "card-scanner-1338a",
+        storageBucket:     "card-scanner-1338a.firebasestorage.app",
+        messagingSenderId: "300868355176",
+        appId:             "1:300868355176:web:9e6eb811ddae19dd39e7dd"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    const versionBadge = document.getElementById('versionBadge');
+    const downloadBtn  = document.getElementById('downloadBtn');
+    const btnLabel     = document.getElementById('btnLabel');
+    const btnSpinner   = document.getElementById('btnSpinner');
+    const whatsNewBox  = document.getElementById('whatsNewBox');
+    const whatsNewText = document.getElementById('whatsNewText');
+    const footerVersion = document.getElementById('footerVersion');
+
+    try {
+        const snap = await getDoc(doc(db, "settings", "global"));
+
+        if (snap.exists()) {
+            const data    = snap.data();
+            const version = data.latestVersion || '1.0.0';
+            const apkUrl  = data.apkUrl        || '#';
+            const notes   = data.updateNotes   || '';
+
+            // Version badge
+            versionBadge.textContent = `v${version}`;
+            footerVersion.textContent = `v${version}`;
+
+            // What's new section
+            if (notes.trim()) {
+                whatsNewText.textContent = notes;
+                whatsNewBox.style.display = 'block';
+            }
+
+            // Activate download button
+            if (apkUrl && apkUrl !== '#') {
+                downloadBtn.href = apkUrl;
+                downloadBtn.onclick = null;  // allow normal link navigation
+            }
+
+            // Remove loading state
+            downloadBtn.classList.remove('loading');
+            btnSpinner.style.display = 'none';
+            btnLabel.textContent = `Download APK  v${version}`;
+        } else {
+            // Fallback if settings not configured
+            versionBadge.textContent = 'v1.0.0';
+            downloadBtn.classList.remove('loading');
+            btnSpinner.style.display = 'none';
+            btnLabel.textContent = 'Download APK';
+            downloadBtn.onclick = () => alert('Download link not configured yet. Please check back later.');
+        }
+    } catch (err) {
+        versionBadge.textContent = 'Latest';
+        downloadBtn.classList.remove('loading');
+        btnSpinner.style.display = 'none';
+        btnLabel.textContent = 'Download APK';
+        console.error('Firebase error:', err);
+    }
+</script>
+
+</body>
+</html>
