@@ -5,8 +5,19 @@ import {
     getDoc, where, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
 
+// ✅ SECURITY FIX: Import Firebase Auth — replaces the old localStorage bypass
+// Previously anyone could type localStorage.setItem('admin_session','true') in
+// DevTools and get full dashboard access. Firebase Auth requires a real
+// email + password that only you know, backed by Google's auth infrastructure.
+import {
+    getAuth,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
+
 const firebaseConfig = {
-    apiKey:            "AIzaSyBfnO29PNacfCnUMSHBPyOze-H5wt80D-g",
+    apiKey:            "AIzaSyASAi6G8sgsVW8GDAFTyA38RWlbUIZ0Fcw",
     authDomain:        "card-scanner-1338a.firebaseapp.com",
     projectId:         "card-scanner-1338a",
     storageBucket:     "card-scanner-1338a.firebasestorage.app",
@@ -14,8 +25,9 @@ const firebaseConfig = {
     appId:             "1:300868355176:web:9e6eb811ddae19dd39e7dd"
 };
 
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+const app  = initializeApp(firebaseConfig);
+const db   = getFirestore(app);
+const auth = getAuth(app); // ✅ NEW: Auth instance
 
 let allLicenses   = [];
 let allUsers      = [];
@@ -24,15 +36,107 @@ let currentSearch = '';
 let userSearch    = '';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const tableBody    = document.getElementById('tableBody');
+const tableBody      = document.getElementById('tableBody');
 const usersTableBody = document.getElementById('usersTableBody');
-const activityFeed = document.getElementById('activityFeed');
-const totalCount   = document.getElementById('totalCount');
-const activeCount  = document.getElementById('activeCount');
-const pendingCount = document.getElementById('pendingCount');
-const blockedCount = document.getElementById('blockedCount');
-const expiredCount = document.getElementById('expiredCount');
-const deletedCount = document.getElementById('deletedCount');
+const activityFeed   = document.getElementById('activityFeed');
+const totalCount     = document.getElementById('totalCount');
+const activeCount    = document.getElementById('activeCount');
+const pendingCount   = document.getElementById('pendingCount');
+const blockedCount   = document.getElementById('blockedCount');
+const expiredCount   = document.getElementById('expiredCount');
+const deletedCount   = document.getElementById('deletedCount');
+
+// ── Auth state — the ONLY gate to the dashboard ───────────────────────────────
+//
+// onAuthStateChanged fires automatically when the page loads.
+// If Firebase already has a valid session (user logged in recently),
+// it fires with a user object → show dashboard.
+// If not → show login screen.
+// This completely replaces the old localStorage check which was bypassable.
+//
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        showDashboard();
+    } else {
+        document.getElementById('loginScreen').style.display    = 'flex';
+        document.getElementById('dashboardContent').style.display = 'none';
+    }
+});
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+document.getElementById('loginBtn').onclick = async () => {
+    const email    = document.getElementById('adminEmail').value.trim();
+    const password = document.getElementById('adminPass').value;
+    const errorEl  = document.getElementById('loginError');
+    const btn      = document.getElementById('loginBtn');
+
+    if (!email || !password) {
+        errorEl.textContent      = 'Please enter your email and password.';
+        errorEl.style.display    = 'block';
+        return;
+    }
+
+    btn.disabled  = true;
+    btn.innerText = 'Signing in...';
+    errorEl.style.display = 'none';
+
+    try {
+        // Firebase Auth validates credentials server-side.
+        // No Firestore read needed, no password stored in the database.
+        await signInWithEmailAndPassword(auth, email, password);
+        // onAuthStateChanged above will fire and call showDashboard()
+    } catch (e) {
+        let msg = 'Invalid email or password.';
+        if (e.code === 'auth/invalid-email')         msg = 'Please enter a valid email address.';
+        if (e.code === 'auth/too-many-requests')     msg = 'Too many attempts. Please wait a few minutes.';
+        if (e.code === 'auth/network-request-failed') msg = 'No internet connection.';
+        errorEl.textContent   = msg;
+        errorEl.style.display = 'block';
+    } finally {
+        btn.disabled  = false;
+        btn.innerText = 'Unlock Dashboard';
+    }
+};
+
+// Allow pressing Enter in password field to submit
+document.getElementById('adminPass').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('loginBtn').click();
+});
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+document.getElementById('logoutBtn').onclick = async () => {
+    await signOut(auth);
+    // onAuthStateChanged fires → shows login screen automatically
+};
+
+// ── Dashboard init ────────────────────────────────────────────────────────────
+function showDashboard() {
+    document.getElementById('loginScreen').style.display    = 'none';
+    document.getElementById('dashboardContent').style.display = 'flex';
+    startListeners();
+    bindSettingsButtons();
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('#mainNav a[data-tab]').forEach(link => {
+    link.onclick = e => {
+        e.preventDefault();
+        const tab = link.getAttribute('data-tab');
+        document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('#mainNav a').forEach(l => l.classList.remove('active'));
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        link.classList.add('active');
+    };
+});
+
+document.querySelectorAll('.stat-card.clickable').forEach(card => {
+    card.onclick = () => {
+        document.querySelectorAll('.stat-card.clickable').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        currentFilter = card.getAttribute('data-filter');
+        renderLicenses();
+    };
+});
 
 // ── License actions ───────────────────────────────────────────────────────────
 
@@ -89,8 +193,8 @@ window.extendKey = (id) => {
     document.getElementById('extendModal').style.display = 'flex';
 
     const update = () => {
-        const days = parseInt(document.getElementById('extendDays').value) || 0;
-        const base = lic.expiryDate ? new Date(lic.expiryDate.seconds * 1000) : new Date();
+        const days      = parseInt(document.getElementById('extendDays').value) || 0;
+        const base      = lic.expiryDate ? new Date(lic.expiryDate.seconds * 1000) : new Date();
         const newExpiry = new Date(base.getTime() + days * 86400000);
         document.getElementById('extendCurrentExpiry').textContent =
             `Current expiry: ${lic.expiryDate ? base.toLocaleDateString() : 'Not yet activated'}`;
@@ -103,14 +207,14 @@ window.extendKey = (id) => {
     document.getElementById('confirmExtendBtn').onclick = async () => {
         const days = parseInt(document.getElementById('extendDays').value);
         if (!days || days < 1) return alert("Enter a valid number of days.");
-        const base = lic.expiryDate ? new Date(lic.expiryDate.seconds * 1000) : new Date();
+        const base      = lic.expiryDate ? new Date(lic.expiryDate.seconds * 1000) : new Date();
         const newExpiry = new Date(base.getTime() + days * 86400000);
-        let newStatus = lic.status === 'expired' ? (lic.deviceId ? 'active' : 'pending') : lic.status;
+        const newStatus = lic.status === 'expired' ? (lic.deviceId ? 'active' : 'pending') : lic.status;
         try {
             await updateDoc(doc(db, "licenses", id), {
                 expiryDate: Timestamp.fromDate(newExpiry), status: newStatus
             });
-            await logActivity(lic.key, `Extended by ${days} day${days===1?'':'s'}`, lic.deviceModel || "System");
+            await logActivity(lic.key, `Extended by ${days} day${days === 1 ? '' : 's'}`, lic.deviceModel || "System");
             document.getElementById('extendModal').style.display = 'none';
             alert(`✅ Extended to ${newExpiry.toLocaleDateString()}`);
         } catch (e) { alert("Failed: " + e.message); }
@@ -132,8 +236,8 @@ window.openUserNoteModal = (deviceId, note) => {
     };
 };
 
-window.showModal  = () => document.getElementById('genModal').style.display = 'flex';
-window.hideModal  = () => document.getElementById('genModal').style.display = 'none';
+window.showModal = () => document.getElementById('genModal').style.display = 'flex';
+window.hideModal = () => document.getElementById('genModal').style.display = 'none';
 
 window.handleGenerate = async () => {
     const prefix      = document.getElementById('prefix').value.toUpperCase() || 'RAK';
@@ -141,7 +245,7 @@ window.handleGenerate = async () => {
     const qty         = parseInt(document.getElementById('qty').value);
     if (qty < 1 || qty > 100) return;
 
-    const btn = document.getElementById('genBtn');
+    const btn      = document.getElementById('genBtn');
     btn.disabled   = true;
     btn.innerText  = "Generating...";
 
@@ -149,8 +253,10 @@ window.handleGenerate = async () => {
         const random   = Math.random().toString(36).substring(2, 10).toUpperCase();
         const checksum = [...(prefix + random)].reduce((a, b) => a + b.charCodeAt(0), 0) % 10;
         const key      = `${prefix}-${random}-${checksum}`;
-        const docData  = { key, deviceId: "", status: "pending", createdAt: serverTimestamp(), activatedAt: null, expiryDate: null };
-
+        const docData  = {
+            key, deviceId: "", status: "pending",
+            createdAt: serverTimestamp(), activatedAt: null, expiryDate: null
+        };
         if      (durationVal === "3")   docData.durationDays   = 3;
         else if (durationVal === "120") docData.lifetime       = true;
         else                            docData.durationMonths = parseInt(durationVal);
@@ -164,75 +270,22 @@ window.handleGenerate = async () => {
     document.getElementById('genModal').style.display = 'none';
 };
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
-
-if (localStorage.getItem('admin_session') === 'true') showDashboard();
-
-document.getElementById('loginBtn').onclick = async () => {
-    const entered = document.getElementById('adminPass').value;
-    const btn = document.getElementById('loginBtn');
-    btn.disabled  = true;
-    btn.innerText = "Verifying...";
-    try {
-        const snap = await getDoc(doc(db, "settings", "global"));
-        if (!snap.exists()) return alert("Dashboard not configured. Add adminPassword to settings/global.");
-        const correct = snap.data().adminPassword;
-        if (!correct) return alert("No admin password set. Add adminPassword field to settings/global.");
-        if (entered === correct) {
-            localStorage.setItem('admin_session', 'true');
-            showDashboard();
-        } else {
-            document.getElementById('loginError').style.display = 'block';
-        }
-    } catch (e) {
-        alert("Verification failed. Check internet.\n" + e.message);
-    } finally {
-        btn.disabled  = false;
-        btn.innerText = "Unlock Dashboard";
-    }
-};
-
-function showDashboard() {
-    document.getElementById('loginScreen').style.display   = 'none';
-    document.getElementById('dashboardContent').style.display = 'flex';
-    startListeners();
-    bindSettingsButtons();
-}
-
-// ── Tab switching ─────────────────────────────────────────────────────────────
-
-document.querySelectorAll('#mainNav a[data-tab]').forEach(link => {
-    link.onclick = e => {
-        e.preventDefault();
-        const tab = link.getAttribute('data-tab');
-        document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('#mainNav a').forEach(l => l.classList.remove('active'));
-        document.getElementById(`tab-${tab}`).classList.add('active');
-        link.classList.add('active');
-    };
-});
-
-document.querySelectorAll('.stat-card.clickable').forEach(card => {
-    card.onclick = () => {
-        document.querySelectorAll('.stat-card.clickable').forEach(c => c.classList.remove('active'));
-        card.classList.add('active');
-        currentFilter = card.getAttribute('data-filter');
-        renderLicenses();
-    };
-});
-
 // ── Activity logging + auto-trim ──────────────────────────────────────────────
 
 async function logActivity(key, action, device = "System") {
     try {
-        await addDoc(collection(db, "activity"), { key, action, device, timestamp: serverTimestamp() });
+        await addDoc(collection(db, "activity"), {
+            key, action, device, timestamp: serverTimestamp()
+        });
         trimActivityLogs();
     } catch(e) { console.error("Log error:", e); }
 }
 
 async function trimActivityLogs() {
     try {
-        const all = await getDocs(query(collection(db, "activity"), orderBy("timestamp", "asc")));
+        const all = await getDocs(
+            query(collection(db, "activity"), orderBy("timestamp", "asc"))
+        );
         if (all.size > 100) {
             for (const d of all.docs.slice(0, all.size - 100)) await deleteDoc(d.ref);
         }
@@ -240,6 +293,8 @@ async function trimActivityLogs() {
 }
 
 // ── Settings buttons ──────────────────────────────────────────────────────────
+// NOTE: "Change Password" card is removed — passwords are now managed in
+// Firebase Console → Authentication → Users. This is more secure.
 
 function bindSettingsButtons() {
     // Announcement
@@ -265,7 +320,9 @@ function bindSettingsButtons() {
     // Kill switch
     document.getElementById('setting-killswitch').onchange = async e => {
         const isOn = e.target.checked;
-        if (!confirm(isOn ? "⚠️ Enable Kill-Switch? ALL users will be blocked immediately." : "Re-enable app for all users?")) {
+        if (!confirm(isOn
+            ? "⚠️ Enable Kill-Switch? ALL users will be blocked immediately."
+            : "Re-enable app for all users?")) {
             e.target.checked = !isOn; return;
         }
         try {
@@ -273,22 +330,7 @@ function bindSettingsButtons() {
         } catch (e) { alert("Failed: " + e.message); e.target.checked = !isOn; }
     };
 
-    // Change password
-    document.getElementById('savePasswordBtn').onclick = async () => {
-        const np = document.getElementById('setting-password').value.trim();
-        const nc = document.getElementById('setting-password-confirm').value.trim();
-        if (!np || np.length < 6) return alert("Password must be at least 6 characters.");
-        if (np !== nc) return alert("Passwords do not match.");
-        if (!confirm("Change admin password?")) return;
-        try {
-            await setDoc(doc(db, "settings", "global"), { adminPassword: np }, { merge: true });
-            document.getElementById('setting-password').value         = '';
-            document.getElementById('setting-password-confirm').value = '';
-            alert("✅ Password changed!");
-        } catch (e) { alert("Failed: " + e.message); }
-    };
-
-    // ── Update management ─────────────────────────────────────────────────────
+    // Update management
     document.getElementById('saveUpdateBtn').onclick = async () => {
         const latest      = document.getElementById('setting-latest-version').value.trim();
         const minVer      = document.getElementById('setting-min-version').value.trim();
@@ -296,51 +338,56 @@ function bindSettingsButtons() {
         const updateNotes = document.getElementById('setting-update-notes').value.trim();
 
         if (!latest) return alert("Latest version is required (e.g. 1.0.1)");
-        const versionPattern = /^\d+\.\d+\.\d+$/;
-        if (!versionPattern.test(latest)) return alert("Version format must be X.Y.Z (e.g. 1.2.0)");
-        if (minVer && !versionPattern.test(minVer)) return alert("Min version format must be X.Y.Z");
+        const vPattern = /^\d+\.\d+\.\d+$/;
+        if (!vPattern.test(latest)) return alert("Version must be X.Y.Z format (e.g. 1.2.0)");
+        if (minVer && !vPattern.test(minVer)) return alert("Min version must be X.Y.Z format");
 
         try {
             await setDoc(doc(db, "settings", "global"), {
                 latestVersion: latest,
-                minVersion:    minVer  || latest,
+                minVersion:    minVer || latest,
                 apkUrl:        apkUrl,
                 updateNotes:   updateNotes
             }, { merge: true });
-            alert(`✅ Update info saved!\nLatest: ${latest}\nMin allowed: ${minVer || latest}\n\nUsers on older versions will see the update prompt.`);
+            alert(`✅ Update info saved!\nLatest: ${latest} | Min: ${minVer || latest}`);
         } catch (e) { alert("Failed: " + e.message); }
     };
 }
 
-// ── Listeners ─────────────────────────────────────────────────────────────────
+// ── Realtime listeners ────────────────────────────────────────────────────────
 
 function startListeners() {
+    // Licenses
     onSnapshot(query(collection(db, "licenses"), orderBy("createdAt", "desc")), snap => {
         allLicenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         updateStats();
         renderLicenses();
     });
 
+    // Users
     onSnapshot(query(collection(db, "users"), orderBy("lastActive", "desc")), snap => {
         allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderUsers();
     });
 
+    // Activity
     onSnapshot(query(collection(db, "activity"), orderBy("timestamp", "desc"), limit(100)), snap => {
         renderActivity(snap.docs.map(d => d.data()));
     });
 
+    // Settings
     onSnapshot(doc(db, "settings", "global"), snap => {
         if (!snap.exists()) return;
         const data = snap.data();
         if (document.activeElement !== document.getElementById('setting-announcement'))
             document.getElementById('setting-announcement').value = data.announcement || '';
-        document.getElementById('setting-support').value          = data.supportLink   || '';
-        document.getElementById('setting-killswitch').checked     = data.killSwitch    || false;
-        document.getElementById('killSwitchStatus').innerText     = data.killSwitch ? "APP IS DISABLED (KILL-SWITCH ON)" : "App is Live";
-        document.getElementById('killSwitchStatus').style.color   = data.killSwitch ? "red" : "green";
+        document.getElementById('setting-support').value      = data.supportLink   || '';
+        document.getElementById('setting-killswitch').checked = data.killSwitch    || false;
+        document.getElementById('killSwitchStatus').innerText =
+            data.killSwitch ? "APP IS DISABLED (KILL-SWITCH ON)" : "App is Live";
+        document.getElementById('killSwitchStatus').style.color =
+            data.killSwitch ? "red" : "green";
 
-        // Populate update fields (don't overwrite if user is typing)
         if (document.activeElement !== document.getElementById('setting-latest-version'))
             document.getElementById('setting-latest-version').value = data.latestVersion || '';
         if (document.activeElement !== document.getElementById('setting-min-version'))
@@ -352,7 +399,7 @@ function startListeners() {
     });
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// ── Render functions ──────────────────────────────────────────────────────────
 
 function updateStats() {
     totalCount.innerText   = allLicenses.length;
@@ -369,24 +416,39 @@ function renderLicenses() {
     if (currentFilter !== 'all') filtered = filtered.filter(l => l.status === currentFilter);
     if (currentSearch) {
         const s = currentSearch.toLowerCase();
-        filtered = filtered.filter(l => l.key.toLowerCase().includes(s) || (l.deviceId && l.deviceId.toLowerCase().includes(s)));
+        filtered = filtered.filter(l =>
+            l.key.toLowerCase().includes(s) ||
+            (l.deviceId && l.deviceId.toLowerCase().includes(s))
+        );
     }
     filtered.forEach(item => {
-        const expiry = item.expiryDate ? new Date(item.expiryDate.seconds * 1000).toLocaleDateString() : 'Not Activated';
+        const expiry    = item.expiryDate
+            ? new Date(item.expiryDate.seconds * 1000).toLocaleDateString()
+            : 'Not Activated';
         const extendBtn = item.status !== 'deleted'
-            ? `<button class="btn-icon" onclick="window.extendKey('${item.id}')" title="Extend"><i class="fas fa-calendar-plus"></i></button>` : '';
+            ? `<button class="btn-icon" onclick="window.extendKey('${item.id}')" title="Extend">
+                   <i class="fas fa-calendar-plus"></i></button>` : '';
         const row = document.createElement('tr');
         row.innerHTML = `
             <td><strong>${item.key}</strong></td>
-            <td><small>${item.deviceModel||'N/A'}</small><br><code>${item.deviceId ? item.deviceId.substring(0,8)+'...' : 'Unassigned'}</code></td>
+            <td>
+                <small>${item.deviceModel || 'N/A'}</small><br>
+                <code>${item.deviceId ? item.deviceId.substring(0,8)+'...' : 'Unassigned'}</code>
+            </td>
             <td><span class="status-badge status-${item.status}">${item.status}</span></td>
             <td>${expiry}</td>
             <td>
-                <button class="btn-icon" onclick="window.toggleBlock('${item.id}','${item.status}')" title="${item.status==='blocked'?'Unblock':'Block'}">
-                    <i class="fas ${item.status==='blocked'?'fa-unlock':'fa-ban'}"></i></button>
-                <button class="btn-icon" onclick="window.resetDevice('${item.id}')" title="Reset Device"><i class="fas fa-redo"></i></button>
+                <button class="btn-icon" onclick="window.toggleBlock('${item.id}','${item.status}')"
+                    title="${item.status === 'blocked' ? 'Unblock' : 'Block'}">
+                    <i class="fas ${item.status === 'blocked' ? 'fa-unlock' : 'fa-ban'}"></i>
+                </button>
+                <button class="btn-icon" onclick="window.resetDevice('${item.id}')" title="Reset Device">
+                    <i class="fas fa-redo"></i>
+                </button>
                 ${extendBtn}
-                <button class="btn-icon delete" onclick="window.markDeleted('${item.id}')" title="Delete"><i class="fas fa-trash"></i></button>
+                <button class="btn-icon delete" onclick="window.markDeleted('${item.id}')" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
             </td>`;
         tableBody.appendChild(row);
     });
@@ -397,19 +459,25 @@ function renderUsers() {
     let filtered = allUsers;
     if (userSearch) {
         const s = userSearch.toLowerCase();
-        filtered = filtered.filter(u => u.deviceId.toLowerCase().includes(s) ||
+        filtered = filtered.filter(u =>
+            u.deviceId.toLowerCase().includes(s) ||
             (u.deviceModel && u.deviceModel.toLowerCase().includes(s)) ||
-            (u.currentLicense && u.currentLicense.toLowerCase().includes(s)));
+            (u.currentLicense && u.currentLicense.toLowerCase().includes(s))
+        );
     }
     filtered.forEach(u => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><strong>${u.deviceModel||'Unknown'}</strong></td>
-            <td>${u.deviceOS||'Unknown'}</td>
-            <td><code>${u.currentLicense||'N/A'}</code></td>
-            <td><small>${u.adminNotes||'No notes'}</small></td>
-            <td><button class="btn-primary" style="padding:5px 10px;font-size:.7rem"
-                onclick="window.openUserNoteModal('${u.deviceId}','${u.adminNotes||''}')">Note</button></td>`;
+            <td><strong>${u.deviceModel || 'Unknown'}</strong></td>
+            <td>${u.deviceOS || 'Unknown'}</td>
+            <td><code>${u.currentLicense || 'N/A'}</code></td>
+            <td><small>${u.adminNotes || 'No notes'}</small></td>
+            <td>
+                <button class="btn-primary" style="padding:5px 10px;font-size:.7rem"
+                    onclick="window.openUserNoteModal('${u.deviceId}','${u.adminNotes || ''}')">
+                    Note
+                </button>
+            </td>`;
         usersTableBody.appendChild(row);
     });
 }
@@ -421,26 +489,29 @@ function renderActivity(activities) {
         item.className = 'activity-item';
         let icon = 'info-circle', color = '#3F51B5';
         const a = act.action.toLowerCase();
-        if (a.includes('activated'))  { icon='check-circle';    color='#4caf50'; }
-        else if (a.includes('generated'))  { icon='magic';          color='#9c27b0'; }
-        else if (a.includes('blocked'))    { icon='ban';            color='#f44336'; }
-        else if (a.includes('unblocked'))  { icon='unlock';         color='#2196f3'; }
-        else if (a.includes('deleted'))    { icon='trash';          color='#000';    }
-        else if (a.includes('reset'))      { icon='redo';           color='#ff9800'; }
-        else if (a.includes('expired'))    { icon='clock';          color='#757575'; }
-        else if (a.includes('extended'))   { icon='calendar-plus';  color='#009688'; }
+        if (a.includes('activated'))  { icon = 'check-circle';   color = '#4caf50'; }
+        else if (a.includes('generated'))  { icon = 'magic';          color = '#9c27b0'; }
+        else if (a.includes('blocked'))    { icon = 'ban';            color = '#f44336'; }
+        else if (a.includes('unblocked'))  { icon = 'unlock';         color = '#2196f3'; }
+        else if (a.includes('deleted'))    { icon = 'trash';          color = '#000';    }
+        else if (a.includes('reset'))      { icon = 'redo';           color = '#ff9800'; }
+        else if (a.includes('expired'))    { icon = 'clock';          color = '#757575'; }
+        else if (a.includes('extended'))   { icon = 'calendar-plus';  color = '#009688'; }
         item.innerHTML = `
-            <div class="activity-icon" style="background:${color}22;color:${color}"><i class="fas fa-${icon}"></i></div>
+            <div class="activity-icon" style="background:${color}22;color:${color}">
+                <i class="fas fa-${icon}"></i>
+            </div>
             <div style="flex-grow:1">
                 <p>License <strong>${act.key}</strong>: ${act.action}</p>
-                <small>${act.device} • ${act.timestamp ? new Date(act.timestamp.seconds*1000).toLocaleString() : 'Just now'}</small>
+                <small>${act.device} • ${act.timestamp
+                    ? new Date(act.timestamp.seconds * 1000).toLocaleString()
+                    : 'Just now'}</small>
             </div>`;
         activityFeed.appendChild(item);
     });
 }
 
-// ── Misc bindings ─────────────────────────────────────────────────────────────
-document.getElementById('genBtn').onclick       = window.handleGenerate;
-document.getElementById('searchInput').oninput  = e => { currentSearch = e.target.value; renderLicenses(); };
-document.getElementById('userSearchInput').oninput = e => { userSearch = e.target.value; renderUsers(); };
-document.getElementById('logoutBtn').onclick    = () => { localStorage.removeItem('admin_session'); location.reload(); };
+// ── Event bindings ────────────────────────────────────────────────────────────
+document.getElementById('genBtn').onclick          = window.handleGenerate;
+document.getElementById('searchInput').oninput     = e => { currentSearch = e.target.value; renderLicenses(); };
+document.getElementById('userSearchInput').oninput = e => { userSearch    = e.target.value; renderUsers(); };
