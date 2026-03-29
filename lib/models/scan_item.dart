@@ -7,6 +7,7 @@ class ScanItem {
   final String state;
   final DateTime scanDateTime;
   final DateTime expirationDateTime;
+  final String? photoPath; // Full card photo path (V1.1+)
 
   ScanItem({
     required this.sessionId,
@@ -17,6 +18,7 @@ class ScanItem {
     required this.state,
     required this.scanDateTime,
     required this.expirationDateTime,
+    this.photoPath,
   });
 
   Map<String, dynamic> toMap() => {
@@ -28,6 +30,7 @@ class ScanItem {
     "state": state,
     "scanDateTime": scanDateTime.toIso8601String(),
     "expirationDateTime": expirationDateTime.toIso8601String(),
+    "photoPath": photoPath,
   };
 
   factory ScanItem.fromMap(Map map) => ScanItem(
@@ -37,7 +40,13 @@ class ScanItem {
     amount: (map["amount"] ?? 0) as int,
     scannedNumber: (map["scannedNumber"] ?? "").toString(),
     state: (map["state"] ?? "Inactive").toString(),
-    scanDateTime: DateTime.parse((map["scanDateTime"] ?? DateTime.now().toIso8601String()).toString()),
-    expirationDateTime: DateTime.parse((map["expirationDateTime"] ?? DateTime.now().toIso8601String()).toString()),
+    scanDateTime: DateTime.parse(
+      (map["scanDateTime"] ?? DateTime.now().toIso8601String()).toString(),
+    ),
+    expirationDateTime: DateTime.parse(
+      (map["expirationDateTime"] ?? DateTime.now().toIso8601String())
+          .toString(),
+    ),
+    photoPath: map["photoPath"]?.toString(),
   );
 }

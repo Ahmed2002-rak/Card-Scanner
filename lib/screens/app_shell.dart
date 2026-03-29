@@ -8,6 +8,7 @@ import '../constants/app_version.dart';
 import '../services/secure_licensing.dart';
 import 'history_screen.dart';
 import 'scan_screen.dart';
+import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'activation_screen.dart';
 
@@ -363,6 +364,7 @@ class _AppShellState extends State<AppShell> {
         isActivated: _isActivated,
       ),
       HistoryTab(isActivated: _isActivated),
+      const SearchTab(),
       const SettingsTab(),
     ];
     return Scaffold(
@@ -378,6 +380,10 @@ class _AppShellState extends State<AppShell> {
           NavigationDestination(
             icon: Icon(Icons.history_rounded),
             label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.search_rounded),
+            label: 'Search',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_rounded),

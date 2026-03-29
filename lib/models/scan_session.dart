@@ -8,6 +8,7 @@ class ScanSession {
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   final String? txtPath;
+  final String? zipPath; // ZIP with photos (V1.1+)
 
   ScanSession({
     required this.sessionId,
@@ -19,6 +20,7 @@ class ScanSession {
     required this.createdAt,
     required this.lastUpdatedAt,
     this.txtPath,
+    this.zipPath,
   });
 
   Map<String, dynamic> toMap() => {
@@ -31,6 +33,7 @@ class ScanSession {
     "createdAt": createdAt.toIso8601String(),
     "lastUpdatedAt": lastUpdatedAt.toIso8601String(),
     "txtPath": txtPath,
+    "zipPath": zipPath,
   };
 
   factory ScanSession.fromMap(Map map) => ScanSession(
@@ -40,8 +43,13 @@ class ScanSession {
     digits: (map["digits"] ?? 15) as int,
     isActive: (map["isActive"] ?? false) as bool,
     count: (map["count"] ?? 0) as int,
-    createdAt: DateTime.parse((map["createdAt"] ?? DateTime.now().toIso8601String()).toString()),
-    lastUpdatedAt: DateTime.parse((map["lastUpdatedAt"] ?? DateTime.now().toIso8601String()).toString()),
+    createdAt: DateTime.parse(
+      (map["createdAt"] ?? DateTime.now().toIso8601String()).toString(),
+    ),
+    lastUpdatedAt: DateTime.parse(
+      (map["lastUpdatedAt"] ?? DateTime.now().toIso8601String()).toString(),
+    ),
     txtPath: map["txtPath"]?.toString(),
+    zipPath: map["zipPath"]?.toString(),
   );
 }

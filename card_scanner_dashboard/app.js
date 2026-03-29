@@ -27,13 +27,25 @@ const firebaseConfig = {
 
 const app  = initializeApp(firebaseConfig);
 const db   = getFirestore(app);
-const auth = getAuth(app); // ✅ NEW: Auth instance
+const auth = getAuth(app);
+
+// ✅ SECURITY: Only this UID can access the dashboard.
+// Even if someone creates a Firebase Auth account, they get rejected.
+const ADMIN_UID = '4lnf9HCdVfX4Yl6BseD7kJvQK2j2';
 
 let allLicenses   = [];
 let allUsers      = [];
 let currentFilter = 'all';
 let currentSearch = '';
 let userSearch    = '';
+
+// ── XSS-safe text helper ─────────────────────────────────────────────────────
+// Never use innerHTML with user data. This escapes HTML characters.
+function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str ?? '';
+    return d.innerHTML;
+}
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const tableBody      = document.getElementById('tableBody');
@@ -46,18 +58,18 @@ const blockedCount   = document.getElementById('blockedCount');
 const expiredCount   = document.getElementById('expiredCount');
 const deletedCount   = document.getElementById('deletedCount');
 
-// ── Auth state — the ONLY gate to the dashboard ───────────────────────────────
-//
-// onAuthStateChanged fires automatically when the page loads.
-// If Firebase already has a valid session (user logged in recently),
-// it fires with a user object → show dashboard.
-// If not → show login screen.
-// This completely replaces the old localStorage check which was bypassable.
-//
+// ── Auth state — ADMIN-ONLY gate ─────────────────────────────────────────────
 onAuthStateChanged(auth, (user) => {
-    if (user) {
+    if (user && user.uid === ADMIN_UID) {
         showDashboard();
     } else {
+        if (user) {
+            // Someone logged in but is NOT admin — force logout
+            signOut(auth);
+            const err = document.getElementById('loginError');
+            err.textContent = 'Access denied. This account is not authorized.';
+            err.style.display = 'block';
+        }
         document.getElementById('loginScreen').style.display    = 'flex';
         document.getElementById('dashboardContent').style.display = 'none';
     }
@@ -188,7 +200,8 @@ window.markDeleted = async (id) => {
 
 window.extendKey = (id) => {
     const lic = allLicenses.find(l => l.id === id);
-    if (!lic || lic.status === 'deleted') return alert("Cannot extend a deleted license.");
+    if (!lic) return alert("License not found.");
+    if (lic.status !== 'active') return alert("Only active licenses can be extended.\nExpired or blocked keys cannot be extended — the customer needs a new key.");
 
     document.getElementById('extendModal').style.display = 'flex';
 
@@ -209,7 +222,7 @@ window.extendKey = (id) => {
         if (!days || days < 1) return alert("Enter a valid number of days.");
         const base      = lic.expiryDate ? new Date(lic.expiryDate.seconds * 1000) : new Date();
         const newExpiry = new Date(base.getTime() + days * 86400000);
-        const newStatus = lic.status === 'expired' ? (lic.deviceId ? 'active' : 'pending') : lic.status;
+        const newStatus = lic.status; // stays active
         try {
             await updateDoc(doc(db, "licenses", id), {
                 expiryDate: Timestamp.fromDate(newExpiry), status: newStatus
@@ -250,9 +263,12 @@ window.handleGenerate = async () => {
     btn.innerText  = "Generating...";
 
     for (let i = 0; i < qty; i++) {
-        const random   = Math.random().toString(36).substring(2, 10).toUpperCase();
-        const checksum = [...(prefix + random)].reduce((a, b) => a + b.charCodeAt(0), 0) % 10;
-        const key      = `${prefix}-${random}-${checksum}`;
+        // ✅ Crypto-secure random key (replaces predictable Math.random)
+        const arr = new Uint8Array(10);
+        crypto.getRandomValues(arr);
+        const random   = Array.from(arr, b => b.toString(36).padStart(2,'0')).join('').substring(0,12).toUpperCase();
+        const checksum = [...(prefix + random)].reduce((a, b) => a + b.charCodeAt(0), 0) % 100;
+        const key      = `${prefix}-${random}-${String(checksum).padStart(2,'0')}`;
         const docData  = {
             key, deviceId: "", status: "pending",
             createdAt: serverTimestamp(), activatedAt: null, expiryDate: null
@@ -425,28 +441,28 @@ function renderLicenses() {
         const expiry    = item.expiryDate
             ? new Date(item.expiryDate.seconds * 1000).toLocaleDateString()
             : 'Not Activated';
-        const extendBtn = item.status !== 'deleted'
-            ? `<button class="btn-icon" onclick="window.extendKey('${item.id}')" title="Extend">
+        const extendBtn = item.status === 'active'
+            ? `<button class="btn-icon" onclick="window.extendKey('${esc(item.id)}')" title="Extend">
                    <i class="fas fa-calendar-plus"></i></button>` : '';
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><strong>${item.key}</strong></td>
+            <td><strong>${esc(item.key)}</strong></td>
             <td>
-                <small>${item.deviceModel || 'N/A'}</small><br>
-                <code>${item.deviceId ? item.deviceId.substring(0,8)+'...' : 'Unassigned'}</code>
+                <small>${esc(item.deviceModel || 'N/A')}</small><br>
+                <code>${item.deviceId ? esc(item.deviceId.substring(0,8))+'...' : 'Unassigned'}</code>
             </td>
-            <td><span class="status-badge status-${item.status}">${item.status}</span></td>
-            <td>${expiry}</td>
+            <td><span class="status-badge status-${esc(item.status)}">${esc(item.status)}</span></td>
+            <td>${esc(expiry)}</td>
             <td>
-                <button class="btn-icon" onclick="window.toggleBlock('${item.id}','${item.status}')"
+                <button class="btn-icon" onclick="window.toggleBlock('${esc(item.id)}','${esc(item.status)}')"
                     title="${item.status === 'blocked' ? 'Unblock' : 'Block'}">
                     <i class="fas ${item.status === 'blocked' ? 'fa-unlock' : 'fa-ban'}"></i>
                 </button>
-                <button class="btn-icon" onclick="window.resetDevice('${item.id}')" title="Reset Device">
+                <button class="btn-icon" onclick="window.resetDevice('${esc(item.id)}')" title="Reset Device">
                     <i class="fas fa-redo"></i>
                 </button>
                 ${extendBtn}
-                <button class="btn-icon delete" onclick="window.markDeleted('${item.id}')" title="Delete">
+                <button class="btn-icon delete" onclick="window.markDeleted('${esc(item.id)}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </td>`;
@@ -468,13 +484,13 @@ function renderUsers() {
     filtered.forEach(u => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><strong>${u.deviceModel || 'Unknown'}</strong></td>
-            <td>${u.deviceOS || 'Unknown'}</td>
-            <td><code>${u.currentLicense || 'N/A'}</code></td>
-            <td><small>${u.adminNotes || 'No notes'}</small></td>
+            <td><strong>${esc(u.deviceModel || 'Unknown')}</strong></td>
+            <td>${esc(u.deviceOS || 'Unknown')}</td>
+            <td><code>${esc(u.currentLicense || 'N/A')}</code></td>
+            <td><small>${esc(u.adminNotes || 'No notes')}</small></td>
             <td>
                 <button class="btn-primary" style="padding:5px 10px;font-size:.7rem"
-                    onclick="window.openUserNoteModal('${u.deviceId}','${u.adminNotes || ''}')">
+                    onclick="window.openUserNoteModal('${esc(u.deviceId)}','${esc(u.adminNotes || '')}')">
                     Note
                 </button>
             </td>`;
@@ -502,8 +518,8 @@ function renderActivity(activities) {
                 <i class="fas fa-${icon}"></i>
             </div>
             <div style="flex-grow:1">
-                <p>License <strong>${act.key}</strong>: ${act.action}</p>
-                <small>${act.device} • ${act.timestamp
+                <p>License <strong>${esc(act.key)}</strong>: ${esc(act.action)}</p>
+                <small>${esc(act.device)} • ${act.timestamp
                     ? new Date(act.timestamp.seconds * 1000).toLocaleString()
                     : 'Just now'}</small>
             </div>`;

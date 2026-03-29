@@ -13,4 +13,10 @@
 //   updateNotes    → what changed in plain language for your users
 // ─────────────────────────────────────────────────────────────────────────────
 
-const String kAppVersion = '1.0.0';
+const String kAppVersion = '1.1.1';
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APP VERSION — update this file AND pubspec.yaml every time you release.
+// ─────────────────────────────────────────────────────────────────────────────
+

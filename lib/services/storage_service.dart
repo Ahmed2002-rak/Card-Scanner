@@ -41,13 +41,38 @@ class StorageService {
       // Let's just check if it's the very first time.
       return;
     }
-    
+
     final defaults = [
-      CardType(name: "Mobilis", amounts: [100, 200, 500, 1000, 2000], digits: 15),
-      CardType(name: "Djezzy", amounts: [100, 200, 500, 1000, 2000], digits: 15),
-      CardType(name: "Ooredoo", amounts: [100, 200, 500, 1000, 2000], digits: 15),
-      CardType(name: "Algérie Télécom ADSL", amounts: [500, 1000, 2000, 3000], digits: 16),
-      CardType(name: "Algérie Télécom 4G", amounts: [500, 1000, 2500, 3500, 6500], digits: 16),
+      CardType(
+        name: "Mobilis",
+        exportName: "CRT MOBILIS",
+        amounts: [100, 200, 500, 1000, 2000],
+        digits: 15,
+      ),
+      CardType(
+        name: "Djezzy",
+        exportName: "CRT DJEZZY",
+        amounts: [100, 200, 500, 1000, 2000],
+        digits: 15,
+      ),
+      CardType(
+        name: "Ooredoo",
+        exportName: "CRT OREDO",
+        amounts: [100, 200, 500, 1000, 2000],
+        digits: 15,
+      ),
+      CardType(
+        name: "Algérie Télécom ADSL",
+        exportName: "CRT ADSL",
+        amounts: [500, 1000, 2000, 3000],
+        digits: 16,
+      ),
+      CardType(
+        name: "Algérie Télécom 4G",
+        exportName: "CRT 4G",
+        amounts: [500, 1000, 1500, 2500, 3500, 6500],
+        digits: 16,
+      ),
     ];
     for (var type in defaults) {
       await addCardType(type);
@@ -98,6 +123,8 @@ class StorageService {
   }
 
   bool isCodeAlreadyScanned(String sessionId, String code) {
-    return _itemsBox.values.any((m) => m["sessionId"] == sessionId && m["scannedNumber"] == code);
+    return _itemsBox.values.any(
+      (m) => m["sessionId"] == sessionId && m["scannedNumber"] == code,
+    );
   }
 }

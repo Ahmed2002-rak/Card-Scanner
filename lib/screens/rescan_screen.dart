@@ -30,6 +30,7 @@ class _RescanPageState extends State<RescanPage> {
 
   String _status = "Scan again to replace code.";
   String? _pending;
+  String? _pendingPhotoPath;
   bool _showUseRetry = false;
 
   static const double cropWidthFactor = 0.82;
@@ -73,7 +74,8 @@ class _RescanPageState extends State<RescanPage> {
   }
 
   Future<void> _scan() async {
-    if (_busy || _controller == null || !_controller!.value.isInitialized) return;
+    if (_busy || _controller == null || !_controller!.value.isInitialized)
+      return;
 
     setState(() {
       _busy = true;
@@ -84,9 +86,14 @@ class _RescanPageState extends State<RescanPage> {
 
     try {
       final pic = await _controller!.takePicture();
-      final croppedFile = await _ocr.cropCenterForOcr(pic.path, cropWidthFactor, cropHeightFactor);
+      _pendingPhotoPath = pic.path;
+      final croppedFile = await _ocr.cropCenterForOcr(
+        pic.path,
+        cropWidthFactor,
+        cropHeightFactor,
+      );
       final codes = await _ocr.scanImage(croppedFile, widget.digits);
-      
+
       if (!mounted) return;
 
       if (codes.isEmpty) {
@@ -115,6 +122,7 @@ class _RescanPageState extends State<RescanPage> {
   void _retry() {
     setState(() {
       _pending = null;
+      _pendingPhotoPath = null;
       _showUseRetry = false;
       _status = "Retry scanning...";
     });
@@ -187,7 +195,13 @@ class _RescanPageState extends State<RescanPage> {
                                 child: FilledButton(
                                   onPressed: _pending == null
                                       ? null
-                                      : () => Navigator.pop(context, _pending),
+                                      : () => Navigator.pop(
+                                          context,
+                                          RescanResult(
+                                            code: _pending!,
+                                            photoPath: _pendingPhotoPath,
+                                          ),
+                                        ),
                                   child: const Text("Use this"),
                                 ),
                               ),
@@ -201,4 +215,10 @@ class _RescanPageState extends State<RescanPage> {
             ),
     );
   }
+}
+
+class RescanResult {
+  final String code;
+  final String? photoPath;
+  RescanResult({required this.code, this.photoPath});
 }

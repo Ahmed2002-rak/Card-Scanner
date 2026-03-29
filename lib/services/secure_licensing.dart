@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -9,7 +10,7 @@ import 'dart:io';
 // ─────────────────────────────────────────────────────────────────────────────
 class UpdateStatus {
   final bool hasUpdate;
-  final bool isForced; // true = block app until user downloads
+  final bool isForced;
   final String latestVersion;
   final String apkUrl;
   final String updateNotes;
@@ -41,6 +42,7 @@ class SecureLicensing {
   static const String _lastAnnounceId = 'last_announcement_id';
   static const String _lastExpiryWarnDate = 'last_expiry_warn_date';
   static final _firestore = FirebaseFirestore.instance;
+  static final _functions = FirebaseFunctions.instanceFor(region: 'europe-west1');
 
   // ── Device Safety ──────────────────────────────────────────────────────────
 
@@ -78,7 +80,7 @@ class SecureLicensing {
     await _storage.delete(key: _licenseKeyStored);
   }
 
-  // ── Firestore Streams ──────────────────────────────────────────────────────
+  // ── Firestore Streams (unchanged — direct reads for real-time) ─────────────
 
   static Stream<DocumentSnapshot> getSettingsStream() =>
       _firestore.collection('settings').doc('global').snapshots();
@@ -92,7 +94,7 @@ class SecureLicensing {
         .map((q) => q.docs.isNotEmpty ? q.docs.first : null);
   }
 
-  // ── Remote Verification ────────────────────────────────────────────────────
+  // ── Remote Verification (now via Cloud Function) ───────────────────────────
 
   static Future<bool> verifyOnLaunch() async {
     final key = await getStoredKey();
@@ -102,57 +104,20 @@ class SecureLicensing {
 
   static Future<bool> isKeyValidRemote(String key) async {
     try {
-      final settings = await _firestore
-          .collection('settings')
-          .doc('global')
-          .get();
-      if (settings.exists && settings.data()?['killSwitch'] == true) {
-        return false;
-      }
-
-      final query = await _firestore
-          .collection('licenses')
-          .where('key', isEqualTo: key)
-          .limit(1)
-          .get();
-
-      if (query.docs.isEmpty) return false;
-
-      final doc = query.docs.first;
-      final data = doc.data();
       final deviceId = await _getDeviceId();
-
-      if (data['status'] == 'blocked' ||
-          data['status'] == 'deleted' ||
-          data['status'] == 'expired')
-        return false;
-
-      if (data['expiryDate'] != null) {
-        final expiry = (data['expiryDate'] as Timestamp).toDate();
-        if (DateTime.now().isAfter(expiry)) {
-          await doc.reference.update({'status': 'expired'});
-          await _firestore.collection('activity').add({
-            'key': key,
-            'action': 'Expired',
-            'device': data['deviceModel'] ?? 'Unknown',
-            'timestamp': FieldValue.serverTimestamp(),
-          });
-          return false;
-        }
-      }
-
-      if (data['deviceId'] != null &&
-          data['deviceId'] != '' &&
-          data['deviceId'] != deviceId)
-        return false;
-
-      return true;
+      final result = await _functions.httpsCallable('checkLicense').call({
+        'key': key,
+        'deviceId': deviceId,
+      });
+      final data = result.data as Map<String, dynamic>;
+      return data['valid'] == true;
     } catch (_) {
-      return isActivated(); // offline fallback
+      // Offline fallback — trust local activation state
+      return isActivated();
     }
   }
 
-  // ── Activation ─────────────────────────────────────────────────────────────
+  // ── Activation (now via Cloud Function) ────────────────────────────────────
 
   static Future<bool> activate(String key) async {
     if (!(await isDeviceSafe())) return false;
@@ -171,81 +136,22 @@ class SecureLicensing {
     }
 
     try {
-      final query = await _firestore
-          .collection('licenses')
-          .where('key', isEqualTo: key)
-          .limit(1)
-          .get();
-      if (query.docs.isEmpty) return false;
-
-      final doc = query.docs.first;
-      final data = doc.data();
-
-      if (data['status'] == 'blocked' ||
-          data['status'] == 'deleted' ||
-          data['status'] == 'expired')
-        return false;
-
-      if (data['expiryDate'] != null) {
-        final expiry = (data['expiryDate'] as Timestamp).toDate();
-        if (DateTime.now().isAfter(expiry)) {
-          await doc.reference.update({'status': 'expired'});
-          return false;
-        }
-      }
-
-      if (data['deviceId'] != '' &&
-          data['deviceId'] != null &&
-          data['deviceId'] != deviceId)
-        return false;
-
-      final updates = <String, dynamic>{
+      final result = await _functions.httpsCallable('activateLicense').call({
+        'key': key,
         'deviceId': deviceId,
         'deviceModel': model,
         'deviceOS': os,
-        'status': 'active',
-        'lastReactivationAt': FieldValue.serverTimestamp(),
-      };
+      });
 
-      if (data['activatedAt'] == null) {
-        updates['activatedAt'] = FieldValue.serverTimestamp();
-        if (data['durationDays'] != null) {
-          updates['expiryDate'] = Timestamp.fromDate(
-            DateTime.now().add(Duration(days: data['durationDays'] as int)),
-          );
-        } else if (data['durationMonths'] != null) {
-          updates['expiryDate'] = Timestamp.fromDate(
-            DateTime.now().add(
-              Duration(days: (data['durationMonths'] as int) * 30),
-            ),
-          );
-        }
+      final data = result.data as Map<String, dynamic>;
+
+      if (data['success'] == true) {
+        await _storage.write(key: _activationKey, value: 'true');
+        await _storage.write(key: _licenseKeyStored, value: key);
+        return true;
       }
 
-      await doc.reference.update(updates);
-
-      await _firestore.collection('users').doc(deviceId).set({
-        'deviceId': deviceId,
-        'deviceModel': model,
-        'deviceOS': os,
-        'currentLicense': key,
-        'lastActive': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      _firestore
-          .collection('activity')
-          .add({
-            'key': key,
-            'action': 'Activated',
-            'device': model,
-            'timestamp': FieldValue.serverTimestamp(),
-          })
-          .catchError((_) => null);
-
-      await _storage.write(key: _activationKey, value: 'true');
-      await _storage.write(key: _licenseKeyStored, value: key);
-
-      return true;
+      return false;
     } catch (_) {
       return false;
     }
@@ -277,13 +183,7 @@ class SecureLicensing {
     );
   }
 
-  // ── Update Check ───────────────────────────────────────────────────────────
-  //
-  // Reads from Firestore settings/global:
-  //   latestVersion (String) — newest available version e.g. "1.2.0"
-  //   minVersion    (String) — oldest allowed version;  below = forced update
-  //   apkUrl        (String) — direct download link for latest APK
-  //   updateNotes   (String) — what changed, shown to user
+  // ── Update Check (unchanged — reads settings directly) ─────────────────────
 
   static Future<UpdateStatus> checkForUpdate(String currentVersion) async {
     try {
@@ -317,13 +217,10 @@ class SecureLicensing {
     }
   }
 
-  /// Returns true if currentVersion is below minVersion (forced update needed).
-  /// Called from app_shell's settings stream for real-time enforcement.
   static bool checkVersionForced(String currentVersion, String minVersion) {
     return _compareVersions(currentVersion, minVersion) < 0;
   }
 
-  /// Returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2.
   static int _compareVersions(String v1, String v2) {
     try {
       List<int> parse(String v) =>
@@ -340,16 +237,7 @@ class SecureLicensing {
     }
   }
 
-  // ── Remote Config (scalability) ────────────────────────────────────────────
-  //
-  // The dashboard can add any key to settings/global.remoteConfig
-  // and the app reads it here without needing an update.
-  //
-  // Example Firestore field:
-  //   remoteConfig: { "maxScansPerDay": 50, "showWatermark": false }
-  //
-  // Usage in Flutter:
-  //   final limit = await SecureLicensing.getRemoteConfig('maxScansPerDay', 100);
+  // ── Remote Config (unchanged) ──────────────────────────────────────────────
 
   static Future<T> getRemoteConfig<T>(String key, T defaultValue) async {
     try {

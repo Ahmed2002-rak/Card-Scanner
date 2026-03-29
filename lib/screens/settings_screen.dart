@@ -30,7 +30,11 @@ class SettingsTab extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.credit_card_off_rounded, size: 80, color: Colors.grey.shade300),
+                  Icon(
+                    Icons.credit_card_off_rounded,
+                    size: 80,
+                    color: Colors.grey.shade300,
+                  ),
                   const SizedBox(height: 16),
                   const Text("No card configurations yet."),
                   TextButton(
@@ -52,27 +56,50 @@ class SettingsTab extends StatelessWidget {
               return Card(
                 elevation: 0,
                 color: Colors.grey.shade100,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
                   leading: CircleAvatar(
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer,
                     child: const Icon(Icons.sim_card_rounded),
                   ),
-                  title: Text(type.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text("Amounts: ${type.amounts.join(', ')} DA\nDigits: ${type.digits}"),
+                  title: Text(
+                    type.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    "Export: ${type.exportName.isNotEmpty ? type.exportName : type.name}\nAmounts: ${type.amounts.join(', ')} DA | Digits: ${type.digits}",
+                  ),
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+                    icon: const Icon(
+                      Icons.delete_sweep_rounded,
+                      color: Colors.redAccent,
+                    ),
                     onPressed: () async {
                       final bool? confirm = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
                           title: const Text("Delete configuration?"),
-                          content: Text("Are you sure you want to delete ${type.name}?"),
+                          content: Text(
+                            "Are you sure you want to delete ${type.name}?",
+                          ),
                           actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
-                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Delete")),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text("Cancel"),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text("Delete"),
+                            ),
                           ],
                         ),
                       );

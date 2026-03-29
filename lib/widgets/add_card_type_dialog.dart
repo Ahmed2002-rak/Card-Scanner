@@ -4,6 +4,7 @@ import "../services/storage_service.dart";
 
 Future<void> showAddCardTypeDialog(BuildContext context) async {
   final nameCtrl = TextEditingController();
+  final exportNameCtrl = TextEditingController();
   final amountsCtrl = TextEditingController(text: "500,1000,1500,2000");
   final digitsCtrl = TextEditingController(text: "15");
 
@@ -16,24 +17,44 @@ Future<void> showAddCardTypeDialog(BuildContext context) async {
         children: [
           TextField(
             controller: nameCtrl,
-            decoration: const InputDecoration(labelText: "Exact name (ex: CRT MOBILIS)"),
+            decoration: const InputDecoration(
+              labelText: "Display name (ex: Mobilis)",
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: exportNameCtrl,
+            decoration: const InputDecoration(
+              labelText: "Export name for TXT file (ex: CRT MOBILIS)",
+              hintText: "The exact name your software expects",
+            ),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: amountsCtrl,
-            decoration: const InputDecoration(labelText: "Amounts (comma separated)"),
+            decoration: const InputDecoration(
+              labelText: "Amounts (comma separated)",
+            ),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: digitsCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: "Digits length (default 15)"),
+            decoration: const InputDecoration(
+              labelText: "Digits length (default 15)",
+            ),
           ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
-        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Add")),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text("Add"),
+        ),
       ],
     ),
   );
@@ -41,24 +62,41 @@ Future<void> showAddCardTypeDialog(BuildContext context) async {
   if (ok != true) return;
 
   final name = nameCtrl.text.trim();
+  final exportName = exportNameCtrl.text.trim();
   final digits = int.tryParse(digitsCtrl.text.trim()) ?? 15;
-  final amounts = amountsCtrl.text
-      .split(",")
-      .map((e) => int.tryParse(e.trim()))
-      .whereType<int>()
-      .toSet()
-      .toList()
-    ..sort();
+  final amounts =
+      amountsCtrl.text
+          .split(",")
+          .map((e) => int.tryParse(e.trim()))
+          .whereType<int>()
+          .toSet()
+          .toList()
+        ..sort();
 
   if (name.isEmpty || amounts.isEmpty) return;
 
   final storage = StorageService();
-  final exists = storage.getCardTypes().any((t) => t.name.toLowerCase() == name.toLowerCase());
+  final exists = storage.getCardTypes().any(
+    (t) => t.name.toLowerCase() == name.toLowerCase(),
+  );
   if (exists) {
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Name already exists.")));
+    if (context.mounted)
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Name already exists.")));
     return;
   }
 
-  await storage.addCardType(CardType(name: name, digits: digits, amounts: amounts));
-  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Added: $name")));
+  await storage.addCardType(
+    CardType(
+      name: name,
+      exportName: exportName,
+      digits: digits,
+      amounts: amounts,
+    ),
+  );
+  if (context.mounted)
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text("Added: $name")));
 }
